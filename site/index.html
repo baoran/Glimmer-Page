@@ -48,7 +48,21 @@
 
     <section class="view" id="stocks">
       <div class="page-heading"><div><p>A-SHARE UNIVERSE</p><h1>个股信息</h1><small>全市场快照、关键指标排序与历史收盘记录</small></div><span id="stock-total">完整 A 股行情</span></div>
-      <div class="stock-tools"><div class="search-box"><span aria-hidden="true"></span><input id="stock-query" type="search" placeholder="搜索股票名称 / 代码" aria-label="搜索股票名称或代码"></div><label>排序指标<select id="stock-sort"><option value="change">涨幅</option><option value="turnoverRate">换手率</option><option value="volumeRatio">量比</option><option value="pe">市盈率</option><option value="price">价格</option><option value="marketCap">市值</option></select></label><button id="stock-order">从高到低 ↓</button></div>
+      <div class="stock-tools">
+        <div class="stock-primary">
+          <div class="search-box"><span aria-hidden="true"></span><input id="stock-query" type="search" placeholder="搜索股票名称 / 代码" aria-label="搜索股票名称或代码"></div>
+          <label><span>排序</span><select id="stock-sort"><option value="change">涨幅</option><option value="price">价格</option><option value="turnover">成交额</option><option value="turnoverRate">换手率</option><option value="volumeRatio">量比</option><option value="pe">市盈率</option><option value="marketCap">总市值</option><option value="floatMarketCap">流通市值</option><option value="volume">成交量</option><option value="amplitude">振幅</option><option value="code">股票代码</option><option value="name">股票名称</option></select></label>
+          <button type="button" id="stock-order">从高到低 ↓</button>
+        </div>
+        <div class="stock-filters" aria-label="个股筛选条件">
+          <label><span>市场</span><select id="stock-market"><option value="all">全部市场</option><option value="sh-main">沪市主板</option><option value="sz-main">深市主板</option><option value="chinext">创业板</option><option value="star">科创板</option><option value="bj">北交所</option></select></label>
+          <label><span>价格</span><select id="stock-price"><option value="all">全部价格</option><option value="under-10">10 元以下</option><option value="10-30">10–30 元</option><option value="30-100">30–100 元</option><option value="over-100">100 元以上</option></select></label>
+          <label><span>市值</span><select id="stock-cap"><option value="all">全部市值</option><option value="under-5b">50 亿以下</option><option value="5b-20b">50–200 亿</option><option value="20b-100b">200–1000 亿</option><option value="over-100b">1000 亿以上</option></select></label>
+          <label><span>市盈率</span><select id="stock-pe"><option value="all">全部估值</option><option value="loss">亏损 / 无有效 PE</option><option value="0-20">0–20 倍</option><option value="20-50">20–50 倍</option><option value="over-50">50 倍以上</option></select></label>
+          <label><span>交易特征</span><select id="stock-activity"><option value="all">全部特征</option><option value="rise-3">涨幅 ≥ 3%</option><option value="fall-3">跌幅 ≤ -3%</option><option value="turnover-5">换手率 ≥ 5%</option><option value="volume-ratio-1">量比 ≥ 1</option><option value="amount-1b">成交额 ≥ 10 亿</option></select></label>
+          <div class="filter-status"><span id="stock-filter-count" aria-live="polite">全部股票</span><button type="button" id="stock-clear">清除筛选</button></div>
+        </div>
+      </div>
       <div id="history-panel" class="history-panel" hidden></div>
       <div class="table-wrap"><table><caption class="sr-only">A股个股收盘行情数据</caption><thead><tr><th>#</th><th>股票</th><th>收盘价</th><th>涨幅</th><th>换手率</th><th>量比</th><th>市盈率</th><th>总市值</th><th>成交额</th></tr></thead><tbody id="stock-rows"></tbody></table></div>
       <div class="pagination"><button id="prev">上一页</button><b id="page-label">1 / 1</b><button id="next">下一页</button></div>

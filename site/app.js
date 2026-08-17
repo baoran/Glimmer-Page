@@ -11,7 +11,7 @@ const safeUrl = (value) => { try { const url = new URL(value); return ["http:", 
 const bars = (seed, rising) => { let h = [...seed].reduce((sum, char) => sum + char.charCodeAt(0), 0); return Array.from({ length: 9 }, (_, i) => { h = (h * 9301 + 49297) % 233280; return Math.min(96, Math.round(25 + h / 233280 * 45 + (rising ? i : 8 - i) * 3)); }); };
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-const state = { daily: null, archive: [], stocks: [], history: [], newsDate: "", newsSource: "全部", query: "", sort: "change", descending: true, page: 1 };
+const state = { daily: null, archive: [], stocks: [], history: [], newsDate: "", newsSource: "全部", query: "", sort: "change", descending: true, market: "all", priceRange: "all", capRange: "all", peRange: "all", activity: "all", page: 1 };
 
 function setView(view) {
   $$(".view").forEach((node) => node.classList.toggle("active", node.id === view));
@@ -69,7 +69,26 @@ function renderNews() {
 
 function filteredStocks() {
   const term = state.query.trim().toLowerCase();
-  return state.stocks.filter((item) => !term || item.name.toLowerCase().includes(term) || item.code.includes(term)).sort((a, b) => (Number(a[state.sort] || 0) - Number(b[state.sort] || 0)) * (state.descending ? -1 : 1));
+  const marketOf = (item) => {
+    if (item.secid.startsWith("bj") || /^(4|8|92)/.test(item.code)) return "bj";
+    if (/^(688|689)/.test(item.code)) return "star";
+    if (/^(300|301)/.test(item.code)) return "chinext";
+    if (item.secid.startsWith("sh") || /^6/.test(item.code)) return "sh-main";
+    return "sz-main";
+  };
+  const inPriceRange = (price) => state.priceRange === "all" || (state.priceRange === "under-10" && price < 10) || (state.priceRange === "10-30" && price >= 10 && price < 30) || (state.priceRange === "30-100" && price >= 30 && price < 100) || (state.priceRange === "over-100" && price >= 100);
+  const inCapRange = (cap) => state.capRange === "all" || (state.capRange === "under-5b" && cap < 5e9) || (state.capRange === "5b-20b" && cap >= 5e9 && cap < 2e10) || (state.capRange === "20b-100b" && cap >= 2e10 && cap < 1e11) || (state.capRange === "over-100b" && cap >= 1e11);
+  const inPeRange = (pe) => state.peRange === "all" || (state.peRange === "loss" && pe <= 0) || (state.peRange === "0-20" && pe > 0 && pe <= 20) || (state.peRange === "20-50" && pe > 20 && pe <= 50) || (state.peRange === "over-50" && pe > 50);
+  const matchesActivity = (item) => state.activity === "all" || (state.activity === "rise-3" && item.change >= 3) || (state.activity === "fall-3" && item.change <= -3) || (state.activity === "turnover-5" && item.turnoverRate >= 5) || (state.activity === "volume-ratio-1" && item.volumeRatio >= 1) || (state.activity === "amount-1b" && item.turnover >= 1e9);
+  const sortValue = (item) => state.sort === "amplitude" ? (item.previousClose ? (item.high - item.low) / item.previousClose * 100 : 0) : item[state.sort];
+  const direction = state.descending ? -1 : 1;
+  return state.stocks
+    .filter((item) => (!term || item.name.toLowerCase().includes(term) || item.code.includes(term)) && (state.market === "all" || marketOf(item) === state.market) && inPriceRange(item.price) && inCapRange(item.marketCap) && inPeRange(item.pe) && matchesActivity(item))
+    .sort((a, b) => {
+      if (state.sort === "name") return a.name.localeCompare(b.name, "zh-CN") * direction;
+      if (state.sort === "code") return a.code.localeCompare(b.code, "zh-CN", { numeric: true }) * direction;
+      return (Number(sortValue(a) || 0) - Number(sortValue(b) || 0)) * direction || a.code.localeCompare(b.code, "zh-CN", { numeric: true });
+    });
 }
 
 function renderStocks() {
@@ -78,8 +97,11 @@ function renderStocks() {
   const pages = Math.max(1, Math.ceil(rows.length / perPage));
   state.page = Math.min(state.page, pages);
   const visible = rows.slice((state.page - 1) * perPage, state.page * perPage);
-  $("#stock-total").textContent = state.query ? `找到 ${rows.length} 只 · 全市场 ${state.stocks.length} 只` : `覆盖沪深北 A 股 ${state.stocks.length} 只`;
-  $("#stock-rows").innerHTML = visible.map((item, index) => `<tr><td>${String((state.page - 1) * perPage + index + 1).padStart(2, "0")}</td><td><button class="stock-name" data-secid="${esc(item.secid)}"><b>${esc(item.name)}</b><small>${esc(item.code)} · 查看历史</small></button></td><td>${item.price.toFixed(2)}</td><td class="${tone(item.change)}">${signed(item.change)}%</td><td>${item.turnoverRate.toFixed(2)}%</td><td>${item.volumeRatio ? item.volumeRatio.toFixed(2) : "—"}</td><td>${item.pe > 0 ? item.pe.toFixed(1) : "亏损"}</td><td>${compact(item.marketCap)}</td><td>${compact(item.turnover)}</td></tr>`).join("");
+  const hasFilters = Boolean(state.query) || [state.market, state.priceRange, state.capRange, state.peRange, state.activity].some((value) => value !== "all");
+  $("#stock-total").textContent = hasFilters ? `筛选 ${rows.length.toLocaleString("zh-CN")} 只 · 全市场 ${state.stocks.length.toLocaleString("zh-CN")} 只` : `覆盖沪深北 A 股 ${state.stocks.length.toLocaleString("zh-CN")} 只`;
+  $("#stock-filter-count").textContent = hasFilters ? `当前 ${rows.length.toLocaleString("zh-CN")} 只` : `全部 ${state.stocks.length.toLocaleString("zh-CN")} 只`;
+  $("#stock-clear").disabled = !hasFilters;
+  $("#stock-rows").innerHTML = visible.length ? visible.map((item, index) => `<tr><td>${String((state.page - 1) * perPage + index + 1).padStart(2, "0")}</td><td><button class="stock-name" data-secid="${esc(item.secid)}"><b>${esc(item.name)}</b><small>${esc(item.code)} · 查看历史</small></button></td><td>${item.price.toFixed(2)}</td><td class="${tone(item.change)}">${signed(item.change)}%</td><td>${item.turnoverRate.toFixed(2)}%</td><td>${item.volumeRatio ? item.volumeRatio.toFixed(2) : "—"}</td><td>${item.pe > 0 ? item.pe.toFixed(1) : "亏损"}</td><td>${compact(item.marketCap)}</td><td>${compact(item.turnover)}</td></tr>`).join("") : `<tr class="stock-empty"><td colspan="9">没有符合当前条件的股票，请调整筛选条件。</td></tr>`;
   $("#page-label").textContent = `${state.page} / ${pages}`;
   $("#prev").disabled = state.page === 1; $("#next").disabled = state.page === pages;
 }
@@ -117,6 +139,14 @@ $("#news-sources").addEventListener("click", (event) => { const button = event.t
 $("#stock-query").addEventListener("input", (event) => { state.query = event.target.value; state.page = 1; renderStocks(); });
 $("#stock-sort").addEventListener("change", (event) => { state.sort = event.target.value; state.page = 1; renderStocks(); });
 $("#stock-order").addEventListener("click", () => { state.descending = !state.descending; $("#stock-order").textContent = state.descending ? "从高到低 ↓" : "从低到高 ↑"; renderStocks(); });
+const stockFilterMap = { "stock-market": "market", "stock-price": "priceRange", "stock-cap": "capRange", "stock-pe": "peRange", "stock-activity": "activity" };
+Object.entries(stockFilterMap).forEach(([id, key]) => $(`#${id}`).addEventListener("change", (event) => { state[key] = event.target.value; state.page = 1; renderStocks(); }));
+$("#stock-clear").addEventListener("click", () => {
+  state.query = ""; state.market = "all"; state.priceRange = "all"; state.capRange = "all"; state.peRange = "all"; state.activity = "all"; state.page = 1;
+  $("#stock-query").value = "";
+  Object.keys(stockFilterMap).forEach((id) => { $(`#${id}`).value = "all"; });
+  renderStocks();
+});
 $("#prev").addEventListener("click", () => { state.page = Math.max(1, state.page - 1); renderStocks(); });
 $("#next").addEventListener("click", () => { state.page += 1; renderStocks(); });
 $("#stock-rows").addEventListener("click", (event) => { const button = event.target.closest("button[data-secid]"); if (button) showHistory(button.dataset.secid); });
