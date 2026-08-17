@@ -1,4 +1,4 @@
-name: Update market data and deploy Pages
+name: Daily refresh
 
 on:
   push:
@@ -30,7 +30,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Fetch the latest A-share snapshot
+      - name: Refresh daily data
         if: github.event_name != 'push'
         run: node scripts/update-pages-data.mjs
 
@@ -40,7 +40,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add site/data
-          git diff --cached --quiet || git commit -m "data: update daily A-share snapshot"
+          git diff --cached --quiet || git commit -m "data: daily refresh"
           git push
 
       - name: Configure GitHub Pages
