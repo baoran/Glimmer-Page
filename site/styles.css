@@ -649,6 +649,22 @@ html[data-theme="dark"] .news-head {
 }
 .metrics span { border: 1px solid var(--line); border-radius: 7px; }
 .strategy { border-radius: 6px; }
+.brand-visual {
+  aspect-ratio: 3.15 / 1;
+  overflow: hidden;
+  margin: 34px 0 0;
+  background: #f4f0e8;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+.brand-visual img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: 50% 72%;
+}
 footer { margin-top: 66px; }
 
 @media (max-width: 1180px) {
@@ -716,6 +732,8 @@ footer { margin-top: 66px; }
   .history-top > button { margin-left: auto; }
   .idea { padding: 20px; }
   .disclaimer { align-items: flex-start; }
+  .brand-visual { aspect-ratio: 1.55 / 1; margin-top: 24px; }
+  .brand-visual img { object-position: 36% 68%; }
   footer { grid-template-columns: 1fr; gap: 16px; padding: 32px 4px; }
   footer > p:last-child { grid-column: auto; }
 }
