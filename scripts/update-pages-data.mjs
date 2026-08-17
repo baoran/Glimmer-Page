@@ -2,11 +2,12 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const ROOT = resolve(process.cwd(), "site", "data");
-const SINA = "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center";
+const EAST_LIST = "https://82.push2.eastmoney.com/api/qt/clist/get";
+const STOCK_FS = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048";
 const HEADERS = { Accept: "application/json,text/plain,*/*", Referer: "https://finance.sina.com.cn/stock/", "User-Agent": "Mozilla/5.0" };
 const INDEXES = [
-  ["sh000001", "上证指数", "000001"], ["sz399001", "深证成指", "399001"],
-  ["sz399006", "创业板指", "399006"], ["sh000300", "沪深300", "000300"], ["sh000688", "科创50", "000688"],
+  ["1.000001", "sh000001", "上证指数", "000001"], ["0.399001", "sz399001", "深证成指", "399001"],
+  ["0.399006", "sz399006", "创业板指", "399006"], ["1.000300", "sh000300", "沪深300", "000300"], ["1.000688", "sh000688", "科创50", "000688"],
 ];
 const relevant = /A股|沪深|上证|深证|创业板|科创|北交所|股票|个股|涨停|跌停|股价|收盘|板块|上市|回购|业绩|证券|ETF|成交额|市值|公司|概念|资金|主力/;
 const n = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -14,54 +15,65 @@ const chunks = (items, size) => Array.from({ length: Math.ceil(items.length / si
 const clean = (value = "") => value.replace(/<[^>]+>/g, "").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim();
 
 async function json(url, headers = HEADERS) {
-  const response = await fetch(url, { headers });
-  if (!response.ok) throw new Error(`${response.status} ${url}`);
-  return response.json();
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch(url, { headers });
+      if (!response.ok) throw new Error(`${response.status} ${url}`);
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
+    }
+  }
+  throw lastError;
+}
+
+function eastUrl({ page = 1, size = 500, fs = STOCK_FS, sort = "f12" } = {}) {
+  const query = new URLSearchParams({ pn: String(page), pz: String(size), po: "1", np: "1", fltt: "2", invt: "2", fid: sort, fs, fields: "f2,f3,f4,f5,f6,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f124" });
+  return `${EAST_LIST}?${query}`;
 }
 
 function mapStock(row) {
+  const code = String(row.f12 ?? "");
+  const prefix = code.startsWith("4") || code.startsWith("8") ? "bj" : n(row.f13) === 1 ? "sh" : "sz";
   return {
-    name: String(row.name ?? "—"), code: String(row.code ?? ""), secid: String(row.symbol ?? ""),
-    price: n(row.trade), change: n(row.changepercent), changeAmount: n(row.pricechange), volume: n(row.volume),
-    turnover: n(row.amount), turnoverRate: n(row.turnoverratio), volumeRatio: 0, pe: n(row.per),
-    high: n(row.high), low: n(row.low), open: n(row.open), previousClose: n(row.settlement),
-    marketCap: n(row.mktcap) * 10000, floatMarketCap: n(row.nmc) * 10000,
+    name: String(row.f14 ?? "—"), code, secid: `${prefix}${code}`,
+    price: n(row.f2), change: n(row.f3), changeAmount: n(row.f4), volume: n(row.f5) * 100,
+    turnover: n(row.f6), turnoverRate: n(row.f8), volumeRatio: n(row.f10), pe: n(row.f9),
+    high: n(row.f15), low: n(row.f16), open: n(row.f17), previousClose: n(row.f18),
+    marketCap: n(row.f20), floatMarketCap: n(row.f21),
   };
 }
 
 async function fetchStocks() {
-  const total = n(await json(`${SINA}.getHQNodeStockCount?node=hs_a`));
-  const pages = Math.ceil(total / 100);
-  const rows = [];
-  for (const group of chunks(Array.from({ length: pages }, (_, i) => i + 1), 8)) {
-    const payloads = await Promise.all(group.map((page) => json(`${SINA}.getHQNodeData?page=${page}&num=100&sort=symbol&asc=1&node=hs_a&symbol=&_s_r_a=page`)));
-    rows.push(...payloads.flat());
+  const first = await json(eastUrl());
+  const total = n(first.data?.total);
+  const pages = Math.ceil(total / 500);
+  const rows = [...(first.data?.diff ?? [])];
+  for (const group of chunks(Array.from({ length: Math.max(0, pages - 1) }, (_, i) => i + 2), 4)) {
+    const payloads = await Promise.all(group.map((page) => json(eastUrl({ page }))));
+    rows.push(...payloads.flatMap((payload) => payload.data?.diff ?? []));
   }
-  const stocks = rows.map(mapStock).filter((stock) => stock.secid);
-  const ratios = new Map();
-  for (const group of chunks(stocks.map((stock) => stock.secid), 450)) {
-    const response = await fetch(`https://qt.gtimg.cn/q=${group.join(",")}`, { headers: { ...HEADERS, Referer: "https://gu.qq.com/" } });
-    if (!response.ok) continue;
-    const text = await response.text();
-    for (const match of text.matchAll(/v_([a-z]{2}\d{6})="([^"]*)"/g)) ratios.set(match[1], n(match[2].split("~")[49]));
-  }
-  return stocks.map((stock) => ({ ...stock, volumeRatio: ratios.get(stock.secid) ?? 0 }));
+  return rows.map(mapStock).filter((stock) => stock.code && stock.price > 0);
 }
 
 async function fetchIndices() {
-  const response = await fetch(`https://qt.gtimg.cn/q=${INDEXES.map(([symbol]) => symbol).join(",")}`, { headers: { ...HEADERS, Referer: "https://gu.qq.com/" } });
-  if (!response.ok) throw new Error("指数接口不可用");
-  const text = await response.text();
-  let tradeDate = "";
-  const indices = INDEXES.flatMap(([symbol, name, code]) => {
-    const raw = text.match(new RegExp(`v_${symbol}="([^"]*)"`))?.[1];
-    if (!raw) return [];
-    const f = raw.split("~");
-    const stamp = f[30]?.slice(0, 8);
-    if (!tradeDate && /^\d{8}$/.test(stamp)) tradeDate = `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}`;
-    return [{ name, code, secid: symbol, price: n(f[3]), changeAmount: n(f[31]), change: n(f[32]), volume: n(f[37]) * 10000, high: n(f[33]), low: n(f[34]), open: n(f[5]), previousClose: n(f[4]) }];
+  const query = new URLSearchParams({ fltt: "2", invt: "2", secids: INDEXES.map(([secid]) => secid).join(","), fields: "f2,f3,f4,f5,f12,f13,f14,f15,f16,f17,f18,f124" });
+  const payload = await json(`https://push2.eastmoney.com/api/qt/ulist.np/get?${query}`);
+  const rows = payload.data?.diff ?? [];
+  const indices = INDEXES.flatMap(([eastId, secid, name, code]) => {
+    const row = rows.find((item) => `${item.f13}.${item.f12}` === eastId);
+    return row ? [{ name, code, secid, price: n(row.f2), changeAmount: n(row.f4), change: n(row.f3), volume: n(row.f5) * 100, high: n(row.f15), low: n(row.f16), open: n(row.f17), previousClose: n(row.f18) }] : [];
   });
-  return { indices, tradeDate: tradeDate || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(new Date()) };
+  const stamp = Math.max(...rows.map((row) => n(row.f124)));
+  const tradeDate = stamp > 0 ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(new Date(stamp * 1000)) : new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(new Date());
+  return { indices, tradeDate };
+}
+
+async function fetchSectors() {
+  const payload = await json(eastUrl({ size: 100, fs: "m:90+t:2", sort: "f3" }));
+  return (payload.data?.diff ?? []).map((row) => ({ name: String(row.f14 ?? "—"), code: String(row.f12 ?? ""), price: n(row.f2), change: n(row.f3), turnover: n(row.f6) }));
 }
 
 const category = (title) => /公司|业绩|回购|增持|减持|重组|上市|公告/.test(title) ? "公司" : /政策|央行|证监|监管|国务院|交易所/.test(title) ? "政策" : /板块|行业|科技|消费|医药|金融|能源|芯片|人工智能|概念/.test(title) ? "行业" : "市场";
@@ -141,15 +153,20 @@ async function readJson(path, fallback) {
 
 async function main() {
   await mkdir(ROOT, { recursive: true });
-  const market = await fetchIndices();
-  const [stocks, sectorsRaw, news] = await Promise.all([
-    fetchStocks(),
-    json(`${SINA}.getHQNodeData?page=1&num=100&sort=changepercent&asc=0&node=hs_s&symbol=&_s_r_a=page`),
-    fetchNews(market.tradeDate),
-  ]);
+  const previousDaily = await readJson(resolve(ROOT, "daily.json"), {});
+  const previousStocks = await readJson(resolve(ROOT, "stocks.json"), {});
+  const [marketResult, stocksResult, sectorsResult] = await Promise.allSettled([fetchIndices(), fetchStocks(), fetchSectors()]);
+  const marketLive = marketResult.status === "fulfilled" && marketResult.value.indices.length >= 3;
+  const stocksLive = stocksResult.status === "fulfilled" && stocksResult.value.length >= 3000;
+  const sectorsLive = sectorsResult.status === "fulfilled" && sectorsResult.value.length >= 12;
+  const market = marketLive ? marketResult.value : { tradeDate: previousDaily.tradeDate, indices: previousDaily.indices ?? [] };
+  const stocks = stocksLive ? stocksResult.value : (previousStocks.items ?? []);
+  const sectorRows = sectorsLive ? sectorsResult.value : (previousDaily.sectors ?? []);
   if (stocks.length < 3000 || market.indices.length < 3) throw new Error("行情数据不完整，停止覆盖 Pages 数据");
-  const sectorRows = sectorsRaw.map((row) => ({ name: String(row.name ?? "—"), code: String(row.code ?? ""), price: n(row.trade), change: n(row.changepercent), turnover: n(row.amount) }));
-  const sectors = [...sectorRows.slice(0, 8), ...sectorRows.slice(-4).reverse()];
+  const sectors = sectorsLive ? [...sectorRows.slice(0, 8), ...sectorRows.slice(-4).reverse()] : sectorRows;
+  const newsResult = await Promise.allSettled([fetchNews(market.tradeDate)]);
+  const newsLive = newsResult[0].status === "fulfilled" && newsResult[0].value.length >= 5;
+  const news = newsLive ? newsResult[0].value : (previousDaily.news ?? []);
   const generatedAt = new Date().toISOString();
   const daily = {
     contentVersion: 1, tradeDate: market.tradeDate, generatedAt, indices: market.indices, sectors,
@@ -169,7 +186,7 @@ async function main() {
     writeFile(archivePath, `${JSON.stringify(nextArchive)}\n`),
     writeFile(historyPath, `${JSON.stringify(nextHistory)}\n`),
   ]);
-  console.log(`微光 Pages 数据已更新：${daily.tradeDate}，${stocks.length} 只股票，${news.length} 条资讯，${daily.recommendations.length} 种战法`);
+  console.log(`微光 Pages 数据已更新：${daily.tradeDate}，${stocks.length} 只股票，${news.length} 条资讯，${daily.recommendations.length} 种战法；行情 ${marketLive && stocksLive && sectorsLive ? "实时" : "缓存兜底"}，资讯 ${newsLive ? "实时" : "缓存兜底"}`);
 }
 
 await main();
