@@ -6,52 +6,61 @@
   <meta name="description" content="微光">
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
   <meta name="theme-color" content="#c9151e">
+  <meta property="og:title" content="微光">
+  <meta property="og:description" content="GLIMMER">
+  <meta property="og:image" content="https://baoran.github.io/Glimmer-Page/assets/og.png">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="微光">
+  <meta name="twitter:description" content="GLIMMER">
+  <meta name="twitter:image" content="https://baoran.github.io/Glimmer-Page/assets/og.png">
   <title>微光</title>
   <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
+  <div class="page-ambient" aria-hidden="true"></div>
   <main class="shell">
     <header class="topbar">
-      <button class="brand" data-view="overview" aria-label="微光首页"><span class="brand-mark" aria-hidden="true"></span><strong>微光</strong><small>A股收盘研究台</small></button>
+      <button class="brand" data-view="overview" aria-label="微光首页"><span class="brand-mark" aria-hidden="true"></span><span class="brand-copy"><strong>微光</strong><small>GLIMMER INTELLIGENCE</small></span></button>
       <nav aria-label="主导航">
-        <button data-view="news">每日资讯</button><button data-view="stocks">个股信息</button><button data-view="ideas">选股建议</button>
+        <button data-view="news"><span>01</span>每日资讯</button><button data-view="stocks"><span>02</span>个股信息</button><button data-view="ideas"><span>03</span>选股建议</button>
       </nav>
-      <button id="theme" class="theme" aria-label="切换夜间模式">☾ <span>夜间</span></button>
+      <button id="theme" class="theme" aria-label="切换夜间模式"><i aria-hidden="true">☾</i><span>夜间</span></button>
     </header>
 
-    <div class="update-strip"><b id="trade-date">正在读取收盘数据…</b><span id="generated-at"></span><em>GitHub 每日自动更新</em></div>
+    <div class="update-strip"><span class="status-dot" aria-hidden="true"></span><b id="trade-date" aria-live="polite">正在读取收盘数据…</b><span id="generated-at"></span><em>每日收盘后自动更新</em></div>
 
     <section class="view active" id="overview">
-      <div class="title"><div><p>DAILY MARKET CLOSE</p><h1>收盘总览</h1></div><span>每日收盘后自动生成 · 沪深北市场</span></div>
-      <div class="summary" id="summary"></div>
+      <div class="overview-hero"><div><p>GLIMMER / MARKET INTELLIGENCE</p><h1>盘后数据，<span>一页看清。</span></h1><small>汇总核心指数、板块强弱与全市场个股快照</small></div><aside><span>MARKET CLOSE</span><strong id="hero-date">—</strong><small>沪 · 深 · 北</small></aside></div>
+      <div class="summary" id="summary" aria-live="polite"></div>
       <div class="indices" id="indices"></div>
-      <div class="sub-title"><div><p>SECTOR PULSE</p><h2>板块脉搏</h2></div><span>强势板块与弱势观察</span></div>
+      <div class="section-heading"><div><p>SECTOR PULSE</p><h2>板块脉搏</h2></div><span>强势板块与弱势观察</span></div>
       <div class="sectors" id="sectors"></div>
     </section>
 
     <section class="view" id="news">
-      <div class="title"><div><p>DAILY HOT SIGNALS</p><h1>每日资讯</h1></div><span>财联社 · 新浪财经 · 同花顺</span></div>
+      <div class="page-heading"><div><p>DAILY HOT SIGNALS</p><h1>每日资讯</h1><small>聚合高热度市场快讯，支持按日期与来源回看</small></div><span>财联社 · 新浪财经 · 同花顺</span></div>
       <div class="news-controls"><div id="news-dates" class="date-tabs"></div><div id="news-sources" class="source-tabs"></div></div>
       <div class="news-head"><b id="news-day">历史资讯</b><span id="news-count"></span></div>
-      <div class="news-list" id="news-list"></div>
+      <div class="news-list" id="news-list" aria-live="polite"></div>
     </section>
 
     <section class="view" id="stocks">
-      <div class="title"><div><p>A-SHARE UNIVERSE</p><h1>个股信息</h1></div><span id="stock-total">完整 A 股行情</span></div>
-      <div class="stock-tools"><input id="stock-query" type="search" placeholder="搜索股票名称 / 代码"><label>排序<select id="stock-sort"><option value="change">涨幅</option><option value="turnoverRate">换手率</option><option value="volumeRatio">量比</option><option value="pe">市盈率</option><option value="price">价格</option><option value="marketCap">市值</option></select></label><button id="stock-order">从高到低 ↓</button></div>
+      <div class="page-heading"><div><p>A-SHARE UNIVERSE</p><h1>个股信息</h1><small>全市场快照、关键指标排序与历史收盘记录</small></div><span id="stock-total">完整 A 股行情</span></div>
+      <div class="stock-tools"><div class="search-box"><span aria-hidden="true"></span><input id="stock-query" type="search" placeholder="搜索股票名称 / 代码" aria-label="搜索股票名称或代码"></div><label>排序指标<select id="stock-sort"><option value="change">涨幅</option><option value="turnoverRate">换手率</option><option value="volumeRatio">量比</option><option value="pe">市盈率</option><option value="price">价格</option><option value="marketCap">市值</option></select></label><button id="stock-order">从高到低 ↓</button></div>
       <div id="history-panel" class="history-panel" hidden></div>
-      <div class="table-wrap"><table><thead><tr><th>#</th><th>股票</th><th>收盘价</th><th>涨幅</th><th>换手率</th><th>量比</th><th>市盈率</th><th>总市值</th><th>成交额</th></tr></thead><tbody id="stock-rows"></tbody></table></div>
+      <div class="table-wrap"><table><caption class="sr-only">A股个股收盘行情数据</caption><thead><tr><th>#</th><th>股票</th><th>收盘价</th><th>涨幅</th><th>换手率</th><th>量比</th><th>市盈率</th><th>总市值</th><th>成交额</th></tr></thead><tbody id="stock-rows"></tbody></table></div>
       <div class="pagination"><button id="prev">上一页</button><b id="page-label">1 / 1</b><button id="next">下一页</button></div>
     </section>
 
     <section class="view" id="ideas">
-      <div class="title"><div><p>MULTI-STRATEGY SELECTION</p><h1>选股建议</h1></div><span>六种战法 · 每种一只</span></div>
-      <div class="disclaimer"><b>观察名单，不是买入指令。</b> 规则模型基于当日收盘数据生成，未纳入隔夜公告、次日跳空等变量。</div>
+      <div class="page-heading"><div><p>MULTI-STRATEGY SELECTION</p><h1>选股建议</h1><small>以多种市场战法交叉观察，避免单一指标偏差</small></div><span>六种战法 · 每种一只</span></div>
+      <div class="disclaimer"><span aria-hidden="true">!</span><p><b>观察名单，不是买入指令。</b> 规则模型基于当日收盘数据生成，未纳入隔夜公告、次日跳空等变量。</p></div>
       <div class="ideas" id="ideas-grid"></div>
     </section>
 
-    <footer><div><span class="brand-mark small" aria-hidden="true"></span><p><b>微光</b><small>A股收盘研究台</small></p></div><p>数据由 GitHub Actions 每日收盘后自动抓取并提交<br>资讯：财联社、新浪财经、同花顺 · 行情：新浪财经、腾讯行情</p><p>选股建议由规则模型生成，不构成投资建议<br>市场有风险，投资需谨慎</p></footer>
+    <footer><div><span class="brand-mark small" aria-hidden="true"></span><p><b>微光</b><small>GLIMMER INTELLIGENCE</small></p></div><p>每日收盘后更新<br>资讯：财联社、新浪财经、同花顺</p><p>规则模型结果仅供数据观察，不构成投资建议<br>市场有风险，投资需谨慎</p></footer>
   </main>
   <script type="module" src="./app.js"></script>
 </body>

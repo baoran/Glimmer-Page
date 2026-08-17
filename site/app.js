@@ -9,26 +9,32 @@ const dateChip = (value) => new Intl.DateTimeFormat("zh-CN", { month: "2-digit",
 const timeText = (value) => new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Shanghai" }).format(new Date(value));
 const safeUrl = (value) => { try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) ? url.toString() : "#"; } catch { return "#"; } };
 const bars = (seed, rising) => { let h = [...seed].reduce((sum, char) => sum + char.charCodeAt(0), 0); return Array.from({ length: 9 }, (_, i) => { h = (h * 9301 + 49297) % 233280; return Math.min(96, Math.round(25 + h / 233280 * 45 + (rising ? i : 8 - i) * 3)); }); };
+const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const state = { daily: null, archive: [], stocks: [], history: [], newsDate: "", newsSource: "全部", query: "", sort: "change", descending: true, page: 1 };
 
 function setView(view) {
   $$(".view").forEach((node) => node.classList.toggle("active", node.id === view));
-  $$("nav [data-view]").forEach((node) => node.classList.toggle("active", node.dataset.view === view));
+  $$("nav [data-view]").forEach((node) => {
+    const active = node.dataset.view === view;
+    node.classList.toggle("active", active);
+    if (active) node.setAttribute("aria-current", "page"); else node.removeAttribute("aria-current");
+  });
   history.replaceState(null, "", view === "overview" ? location.pathname : `#${view}`);
-  scrollTo({ top: 0, behavior: "smooth" });
+  scrollTo({ top: 0, behavior: prefersReducedMotion ? "auto" : "smooth" });
 }
 
 function renderOverview() {
   const { daily } = state;
   $("#trade-date").textContent = `${dateText(daily.tradeDate)} · 收盘数据`;
+  $("#hero-date").textContent = daily.tradeDate.replaceAll("-", " · ");
   $("#generated-at").textContent = `生成 ${timeText(daily.generatedAt)}`;
   $("#summary").innerHTML = `
-    <article><span>核心指数红盘</span><b>${daily.summary.positiveIndices}<small> / ${daily.indices.length}</small></b><em>市场广度</em></article>
-    <article><span>指数平均涨跌</span><b class="${tone(daily.summary.averageIndexChange)}">${signed(daily.summary.averageIndexChange)}<small>%</small></b><em>等权口径</em></article>
-    <article><span>最强行业指数</span><b class="text">${esc(daily.summary.topSector)}</b><em>按收盘涨幅</em></article>
-    <article><span>A股股票总数</span><b>${daily.totalStocks}<small> 只</small></b><em>沪深北市场</em></article>`;
-  $("#indices").innerHTML = daily.indices.map((item) => `<article class="index"><div class="index-head"><span>${esc(item.name)}<small>${esc(item.code)}</small></span><span class="${tone(item.change)}">${signed(item.change)}%</span></div><div class="index-price"><b>${item.price.toLocaleString("zh-CN", { minimumFractionDigits: 2 })}</b><small class="${tone(item.changeAmount)}">${signed(item.changeAmount)}</small></div><div class="bars ${item.change < 0 ? "negative" : ""}">${bars(item.code, item.change >= 0).map((height) => `<i style="height:${height}%"></i>`).join("")}</div><div class="index-foot"><span>高 ${item.high.toFixed(2)}</span><span>低 ${item.low.toFixed(2)}</span><span>${compact(item.volume)}</span></div></article>`).join("");
+    <article data-index="01"><span>核心指数红盘</span><b>${daily.summary.positiveIndices}<small> / ${daily.indices.length}</small></b><em>市场广度</em></article>
+    <article data-index="02"><span>指数平均涨跌</span><b class="${tone(daily.summary.averageIndexChange)}">${signed(daily.summary.averageIndexChange)}<small>%</small></b><em>等权口径</em></article>
+    <article data-index="03"><span>最强行业指数</span><b class="text">${esc(daily.summary.topSector)}</b><em>按收盘涨幅</em></article>
+    <article data-index="04"><span>A股股票总数</span><b>${daily.totalStocks}<small> 只</small></b><em>沪深北市场</em></article>`;
+  $("#indices").innerHTML = daily.indices.map((item) => `<article class="index"><div class="index-head"><span>${esc(item.name)}<small>${esc(item.code)}</small></span><span class="index-change ${tone(item.change)}">${signed(item.change)}%</span></div><div class="index-price"><b>${item.price.toLocaleString("zh-CN", { minimumFractionDigits: 2 })}</b><small class="${tone(item.changeAmount)}">${signed(item.changeAmount)}</small></div><div class="bars ${item.change < 0 ? "negative" : ""}" aria-hidden="true">${bars(item.code, item.change >= 0).map((height) => `<i style="height:${height}%"></i>`).join("")}</div><div class="index-foot"><span>高 ${item.high.toFixed(2)}</span><span>低 ${item.low.toFixed(2)}</span><span>量 ${compact(item.volume)}</span></div></article>`).join("");
   $("#sectors").innerHTML = daily.sectors.map((item, index) => `<article class="sector ${index > 7 ? "lag" : ""}"><div class="sector-head"><b>${String(index + 1).padStart(2, "0")}</b><small>${index > 7 ? "弱势观察" : "活跃板块"}</small></div><h3>${esc(item.name)}</h3><div class="sector-value"><b>${item.price.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}</b><span class="${tone(item.change)}">${signed(item.change)}%</span></div><p>成交额 <b>${compact(item.turnover)}</b></p></article>`).join("");
 }
 
@@ -39,11 +45,11 @@ function renderNews() {
   const sources = ["全部", ...new Set((day?.news || []).map((item) => item.source))];
   if (!sources.includes(state.newsSource)) state.newsSource = "全部";
   const news = (day?.news || []).filter((item) => state.newsSource === "全部" || item.source === state.newsSource);
-  $("#news-dates").innerHTML = days.map((item) => `<button data-date="${esc(item.tradeDate)}" class="${item.tradeDate === state.newsDate ? "active" : ""}"><b>${dateChip(item.tradeDate)}</b><small>${item.news.length} 条</small></button>`).join("");
-  $("#news-sources").innerHTML = sources.map((source) => `<button data-source="${esc(source)}" class="${source === state.newsSource ? "active" : ""}">${esc(source)}</button>`).join("");
+  $("#news-dates").innerHTML = days.map((item) => `<button data-date="${esc(item.tradeDate)}" class="${item.tradeDate === state.newsDate ? "active" : ""}" aria-pressed="${item.tradeDate === state.newsDate}"><b>${dateChip(item.tradeDate)}</b><small>${item.news.length} 条</small></button>`).join("");
+  $("#news-sources").innerHTML = sources.map((source) => `<button data-source="${esc(source)}" class="${source === state.newsSource ? "active" : ""}" aria-pressed="${source === state.newsSource}">${esc(source)}</button>`).join("");
   $("#news-day").textContent = `${dateText(day.tradeDate)} · ${state.newsSource === "全部" ? "全网热门" : state.newsSource}`;
   $("#news-count").textContent = `收录 ${news.length} 条`;
-  $("#news-list").innerHTML = news.length ? news.map((item, index) => `<a class="news-item" href="${esc(safeUrl(item.url))}" target="_blank" rel="noreferrer"><span class="news-rank">${String(index + 1).padStart(2, "0")}</span><div><p class="news-meta"><b>${esc(item.category)}</b>${esc(item.source)} · ${timeText(item.publishedAt)}</p><h3>${esc(item.title)}</h3></div><span class="heat"><i style="width:${Math.max(0, Math.min(100, item.heat))}%"></i>热度 ${item.heat}</span><span>↗</span></a>`).join("") : `<div class="empty">当前日期或来源暂无资讯。</div>`;
+  $("#news-list").innerHTML = news.length ? news.map((item, index) => `<a class="news-item" href="${esc(safeUrl(item.url))}" target="_blank" rel="noopener noreferrer"><span class="news-rank">${String(index + 1).padStart(2, "0")}</span><div><p class="news-meta"><b>${esc(item.category)}</b>${esc(item.source)} · ${timeText(item.publishedAt)}</p><h3>${esc(item.title)}</h3></div><span class="heat"><i style="width:${Math.max(0, Math.min(100, item.heat))}%"></i>热度 ${item.heat}</span><span class="news-link-arrow" aria-hidden="true">↗</span></a>`).join("") : `<div class="empty">当前日期或来源暂无资讯。</div>`;
 }
 
 function filteredStocks() {
@@ -57,7 +63,7 @@ function renderStocks() {
   const pages = Math.max(1, Math.ceil(rows.length / perPage));
   state.page = Math.min(state.page, pages);
   const visible = rows.slice((state.page - 1) * perPage, state.page * perPage);
-  $("#stock-total").textContent = `覆盖沪深北 A 股 ${state.stocks.length} 只`;
+  $("#stock-total").textContent = state.query ? `找到 ${rows.length} 只 · 全市场 ${state.stocks.length} 只` : `覆盖沪深北 A 股 ${state.stocks.length} 只`;
   $("#stock-rows").innerHTML = visible.map((item, index) => `<tr><td>${String((state.page - 1) * perPage + index + 1).padStart(2, "0")}</td><td><button class="stock-name" data-secid="${esc(item.secid)}"><b>${esc(item.name)}</b><small>${esc(item.code)} · 查看历史</small></button></td><td>${item.price.toFixed(2)}</td><td class="${tone(item.change)}">${signed(item.change)}%</td><td>${item.turnoverRate.toFixed(2)}%</td><td>${item.volumeRatio ? item.volumeRatio.toFixed(2) : "—"}</td><td>${item.pe > 0 ? item.pe.toFixed(1) : "亏损"}</td><td>${compact(item.marketCap)}</td><td>${compact(item.turnover)}</td></tr>`).join("");
   $("#page-label").textContent = `${state.page} / ${pages}`;
   $("#prev").disabled = state.page === 1; $("#next").disabled = state.page === pages;
@@ -73,7 +79,7 @@ function showHistory(secid) {
 }
 
 function renderIdeas() {
-  $("#ideas-grid").innerHTML = state.daily.recommendations.length ? state.daily.recommendations.map((item, index) => `<article class="idea"><div class="idea-top"><span>0${index + 1}</span><b>${item.score}</b></div><h3>${esc(item.name)}</h3><small>${esc(item.code)}</small><div class="idea-price"><b>${item.price.toFixed(2)}</b><span class="${tone(item.change)}">${signed(item.change)}%</span></div><div class="metrics"><span>换手<b>${item.turnoverRate.toFixed(2)}%</b></span><span>量比<b>${item.volumeRatio.toFixed(2)}</b></span><span>PE<b>${item.pe.toFixed(1)}</b></span></div><span class="strategy">${esc(item.style)}</span><ul>${item.reasons.map((reason) => `<li>${esc(reason)}</li>`).join("")}</ul><p><b>主要风险：</b>${esc(item.risks.join("、"))}</p></article>`).join("") : `<div class="empty">正在生成多战法观察名单…</div>`;
+  $("#ideas-grid").innerHTML = state.daily.recommendations.length ? state.daily.recommendations.map((item, index) => `<article class="idea"><div class="idea-top"><span>STRATEGY ${String(index + 1).padStart(2, "0")}</span><span class="idea-score">匹配度<b>${item.score}</b></span></div><h3>${esc(item.name)}</h3><small>${esc(item.code)}</small><div class="idea-price"><b>${item.price.toFixed(2)}</b><span class="${tone(item.change)}">${signed(item.change)}%</span></div><div class="metrics"><span>换手<b>${item.turnoverRate.toFixed(2)}%</b></span><span>量比<b>${item.volumeRatio.toFixed(2)}</b></span><span>PE<b>${item.pe.toFixed(1)}</b></span></div><span class="strategy">${esc(item.style)}</span><ul>${item.reasons.map((reason) => `<li>${esc(reason)}</li>`).join("")}</ul><p><b>主要风险：</b>${esc(item.risks.join("、"))}</p></article>`).join("") : `<div class="empty">正在生成多战法观察名单…</div>`;
 }
 
 async function init() {
@@ -83,8 +89,14 @@ async function init() {
 }
 
 $$('[data-view]').forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
-$("#theme").addEventListener("click", () => { const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = next; localStorage.setItem("weiguang-theme", next); $("#theme").innerHTML = next === "dark" ? "☀ <span>日间</span>" : "☾ <span>夜间</span>"; });
-document.documentElement.dataset.theme = localStorage.getItem("weiguang-theme") === "dark" ? "dark" : "light";
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  $("#theme").innerHTML = theme === "dark" ? '<i aria-hidden="true">☀</i><span>日间</span>' : '<i aria-hidden="true">☾</i><span>夜间</span>';
+  $("#theme").setAttribute("aria-label", theme === "dark" ? "切换日间模式" : "切换夜间模式");
+  document.querySelector('meta[name="theme-color"]').setAttribute("content", theme === "dark" ? "#09090a" : "#c9151e");
+}
+$("#theme").addEventListener("click", () => { const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; applyTheme(next); localStorage.setItem("weiguang-theme", next); });
+applyTheme(localStorage.getItem("weiguang-theme") === "dark" ? "dark" : "light");
 $("#news-dates").addEventListener("click", (event) => { const button = event.target.closest("button[data-date]"); if (button) { state.newsDate = button.dataset.date; state.newsSource = "全部"; renderNews(); } });
 $("#news-sources").addEventListener("click", (event) => { const button = event.target.closest("button[data-source]"); if (button) { state.newsSource = button.dataset.source; renderNews(); } });
 $("#stock-query").addEventListener("input", (event) => { state.query = event.target.value; state.page = 1; renderStocks(); });
@@ -94,5 +106,6 @@ $("#prev").addEventListener("click", () => { state.page = Math.max(1, state.page
 $("#next").addEventListener("click", () => { state.page += 1; renderStocks(); });
 $("#stock-rows").addEventListener("click", (event) => { const button = event.target.closest("button[data-secid]"); if (button) showHistory(button.dataset.secid); });
 $("#history-panel").addEventListener("click", (event) => { if (event.target.closest("#history-close")) $("#history-panel").hidden = true; });
+document.addEventListener("keydown", (event) => { if (event.key === "Escape") $("#history-panel").hidden = true; });
 const initialView = ["news", "stocks", "ideas"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview"; setView(initialView);
 init().catch(() => { $("#trade-date").textContent = "数据暂时未生成，请稍后刷新"; $$("#summary,#indices,#sectors,#news-list,#stock-rows,#ideas-grid").forEach((node) => node.innerHTML = `<div class="empty">首次 GitHub Actions 更新完成后将在这里显示数据。</div>`); });
