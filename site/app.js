@@ -26,16 +26,31 @@ function setView(view) {
 
 function renderOverview() {
   const { daily } = state;
+  const indexRank = [...daily.indices].sort((a, b) => b.change - a.change);
+  const sectorRank = [...daily.sectors].sort((a, b) => b.change - a.change);
+  const leadingIndex = indexRank[0];
+  const laggingIndex = indexRank[indexRank.length - 1];
+  const leadingSector = sectorRank[0];
+  const laggingSector = sectorRank[sectorRank.length - 1];
+  const indexAmplitude = (item) => item.previousClose ? (item.high - item.low) / item.previousClose * 100 : 0;
+  const widestIndex = daily.indices.reduce((best, item) => indexAmplitude(item) > indexAmplitude(best) ? item : best, daily.indices[0]);
+  const sectorFloor = Math.min(...sectorRank.map((item) => item.change));
+  const sectorCeiling = Math.max(...sectorRank.map((item) => item.change));
+  const sectorStrength = (value) => sectorCeiling === sectorFloor ? 50 : 12 + (value - sectorFloor) / (sectorCeiling - sectorFloor) * 88;
   $("#trade-date").textContent = `${dateText(daily.tradeDate)} · 收盘数据`;
   $("#hero-date").textContent = daily.tradeDate.replaceAll("-", " · ");
   $("#generated-at").textContent = `生成 ${timeText(daily.generatedAt)}`;
   $("#summary").innerHTML = `
     <article data-index="01"><span>核心指数红盘</span><b>${daily.summary.positiveIndices}<small> / ${daily.indices.length}</small></b><em>市场广度</em></article>
     <article data-index="02"><span>指数平均涨跌</span><b class="${tone(daily.summary.averageIndexChange)}">${signed(daily.summary.averageIndexChange)}<small>%</small></b><em>等权口径</em></article>
-    <article data-index="03"><span>最强行业指数</span><b class="text">${esc(daily.summary.topSector)}</b><em>按收盘涨幅</em></article>
-    <article data-index="04"><span>A股股票总数</span><b>${daily.totalStocks}<small> 只</small></b><em>沪深北市场</em></article>`;
-  $("#indices").innerHTML = daily.indices.map((item) => `<article class="index"><div class="index-head"><span>${esc(item.name)}<small>${esc(item.code)}</small></span><span class="index-change ${tone(item.change)}">${signed(item.change)}%</span></div><div class="index-price"><b>${item.price.toLocaleString("zh-CN", { minimumFractionDigits: 2 })}</b><small class="${tone(item.changeAmount)}">${signed(item.changeAmount)}</small></div><div class="bars ${item.change < 0 ? "negative" : ""}" aria-hidden="true">${bars(item.code, item.change >= 0).map((height) => `<i style="height:${height}%"></i>`).join("")}</div><div class="index-foot"><span>高 ${item.high.toFixed(2)}</span><span>低 ${item.low.toFixed(2)}</span><span>量 ${compact(item.volume)}</span></div></article>`).join("");
-  $("#sectors").innerHTML = daily.sectors.map((item, index) => `<article class="sector ${index > 7 ? "lag" : ""}"><div class="sector-head"><b>${String(index + 1).padStart(2, "0")}</b><small>${index > 7 ? "弱势观察" : "活跃板块"}</small></div><h3>${esc(item.name)}</h3><div class="sector-value"><b>${item.price.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}</b><span class="${tone(item.change)}">${signed(item.change)}%</span></div><p>成交额 <b>${compact(item.turnover)}</b></p></article>`).join("");
+    <article data-index="03"><span>领涨指数</span><b class="text">${esc(leadingIndex.name)}</b><em class="${tone(leadingIndex.change)}">${signed(leadingIndex.change)}%</em></article>
+    <article data-index="04"><span>领跌指数</span><b class="text">${esc(laggingIndex.name)}</b><em class="${tone(laggingIndex.change)}">${signed(laggingIndex.change)}%</em></article>
+    <article data-index="05"><span>最强板块</span><b class="text">${esc(leadingSector.name)}</b><em class="${tone(leadingSector.change)}">${signed(leadingSector.change)}%</em></article>
+    <article data-index="06"><span>最弱板块</span><b class="text">${esc(laggingSector.name)}</b><em class="${tone(laggingSector.change)}">${signed(laggingSector.change)}%</em></article>
+    <article data-index="07"><span>最大指数振幅</span><b>${indexAmplitude(widestIndex).toFixed(2)}<small>%</small></b><em>${esc(widestIndex.name)}</em></article>
+    <article data-index="08"><span>A股股票总数</span><b>${daily.totalStocks}<small> 只</small></b><em>沪深北市场</em></article>`;
+  $("#indices").innerHTML = daily.indices.map((item) => `<article class="index"><div class="index-head"><span>${esc(item.name)}<small>${esc(item.code)}</small></span><span class="index-change ${tone(item.change)}">${signed(item.change)}%</span></div><div class="index-price"><b>${item.price.toLocaleString("zh-CN", { minimumFractionDigits: 2 })}</b><small class="${tone(item.changeAmount)}">${signed(item.changeAmount)}</small></div><div class="bars ${item.change < 0 ? "negative" : ""}" aria-hidden="true">${bars(item.code, item.change >= 0).map((height) => `<i style="height:${height}%"></i>`).join("")}</div><div class="index-foot"><span>今开<b>${item.open.toFixed(2)}</b></span><span>最高<b>${item.high.toFixed(2)}</b></span><span>最低<b>${item.low.toFixed(2)}</b></span><span>昨收<b>${item.previousClose.toFixed(2)}</b></span><span>振幅<b>${indexAmplitude(item).toFixed(2)}%</b></span><span>成交量<b>${compact(item.volume)}</b></span></div></article>`).join("");
+  $("#sectors").innerHTML = sectorRank.map((item, index) => `<article class="sector ${index > 7 ? "lag" : ""}"><div class="sector-head"><b>${String(index + 1).padStart(2, "0")}</b><small>${index > 7 ? "弱势观察" : "活跃板块"}</small></div><h3>${esc(item.name)}<small class="sector-code">${esc(item.code)}</small></h3><div class="sector-value"><b>${item.price.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}</b><span class="${tone(item.change)}">${signed(item.change)}%</span></div><div class="sector-meter" aria-hidden="true"><i style="width:${sectorStrength(item.change).toFixed(1)}%"></i></div><p>成交额 <b>${compact(item.turnover)}</b></p></article>`).join("");
 }
 
 function renderNews() {
