@@ -133,7 +133,7 @@ function applyTheme(theme) {
   document.querySelector('meta[name="theme-color"]').setAttribute("content", theme === "dark" ? "#09090a" : "#c9151e");
 }
 $("#theme").addEventListener("click", () => { const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; applyTheme(next); localStorage.setItem("weiguang-theme", next); });
-applyTheme(localStorage.getItem("weiguang-theme") === "dark" ? "dark" : "light");
+applyTheme(localStorage.getItem("weiguang-theme") === "light" ? "light" : "dark");
 $("#news-dates").addEventListener("click", (event) => { const button = event.target.closest("button[data-date]"); if (button) { state.newsDate = button.dataset.date; state.newsSource = "全部"; renderNews(); } });
 $("#news-sources").addEventListener("click", (event) => { const button = event.target.closest("button[data-source]"); if (button) { state.newsSource = button.dataset.source; renderNews(); } });
 $("#stock-query").addEventListener("input", (event) => { state.query = event.target.value; state.page = 1; renderStocks(); });
