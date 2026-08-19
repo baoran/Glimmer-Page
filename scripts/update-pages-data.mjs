@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 const ROOT = resolve(process.cwd(), "site", "data");
 const EAST_LIST = "https://82.push2.eastmoney.com/api/qt/clist/get";
 const SINA_LIST = "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData";
+const SINA_SECTORS = "https://vip.stock.finance.sina.com.cn/q/view/newSinaHy.php";
 const TENCENT_QUOTES = "https://qt.gtimg.cn/q=";
 const THS_SECTORS = "https://q.10jqka.com.cn/thshy/index/field/199112/order/desc";
 const STOCK_FS = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048";
@@ -196,6 +197,18 @@ async function fetchThsSectors() {
   return rows;
 }
 
+async function fetchSinaSectors() {
+  const payload = await text(SINA_SECTORS, HEADERS, "gbk");
+  const encoded = payload.match(/=\s*(\{[\s\S]*\})\s*;?\s*$/)?.[1];
+  if (!encoded) throw new Error("新浪行业板块响应格式异常");
+  const rows = Object.values(JSON.parse(encoded)).flatMap((value) => {
+    const fields = String(value).split(",");
+    return fields.length >= 8 ? [{ code: fields[0], name: fields[1], price: n(fields[3]), change: n(fields[5]), turnover: n(fields[7]) }] : [];
+  }).sort((a, b) => b.change - a.change);
+  if (rows.length < 30) throw new Error(`新浪财经仅返回 ${rows.length} 个行业板块`);
+  return rows;
+}
+
 const category = (title) => /公司|业绩|回购|增持|减持|重组|上市|公告/.test(title) ? "公司" : /政策|央行|证监|监管|国务院|交易所/.test(title) ? "政策" : /板块|行业|科技|消费|医药|金融|能源|芯片|人工智能|概念/.test(title) ? "行业" : "市场";
 
 async function clsNews(tradeDate) {
@@ -304,7 +317,11 @@ async function main() {
   if (!sectorRows) {
     console.warn(`东方财富板块不可用：${settledError(sectorsResult)}；切换同花顺行业。`);
     try { sectorRows = await fetchThsSectors(); sectorSource = "同花顺"; }
-    catch (error) { console.warn(`同花顺板块不可用：${error.message}`); sectorRows = previousDaily.sectors ?? []; sectorSource = "缓存"; }
+    catch (error) {
+      console.warn(`同花顺板块不可用：${error.message}；切换新浪行业。`);
+      try { sectorRows = await fetchSinaSectors(); sectorSource = "新浪财经"; }
+      catch (backupError) { console.warn(`新浪板块不可用：${backupError.message}`); sectorRows = previousDaily.sectors ?? []; sectorSource = "缓存"; }
+    }
   }
   if (stocks.length < 3000 || market.indices.length < 3) throw new Error("行情数据不完整，停止覆盖 Pages 数据");
   const sectors = sectorSource !== "缓存" ? [...sectorRows.slice(0, 8), ...sectorRows.slice(-4).reverse()] : sectorRows;
