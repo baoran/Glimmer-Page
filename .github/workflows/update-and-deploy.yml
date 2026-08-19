@@ -20,6 +20,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      refresh_outcome: ${{ steps.refresh.outcome }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -31,11 +33,13 @@ jobs:
           node-version: 22
 
       - name: Refresh daily data
+        id: refresh
         if: github.event_name != 'push'
+        continue-on-error: true
         run: node scripts/update-pages-data.mjs
 
       - name: Commit the daily snapshot
-        if: github.event_name != 'push'
+        if: always() && github.event_name != 'push'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -61,3 +65,13 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  market-health:
+    needs: [build, deploy]
+    if: always() && needs.build.outputs.refresh_outcome == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report stale market data
+        run: |
+          echo "The live market sources failed. Cached data was published with a stale-data warning."
+          exit 1

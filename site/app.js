@@ -37,9 +37,14 @@ function renderOverview() {
   const sectorFloor = Math.min(...sectorRank.map((item) => item.change));
   const sectorCeiling = Math.max(...sectorRank.map((item) => item.change));
   const sectorStrength = (value) => sectorCeiling === sectorFloor ? 50 : 12 + (value - sectorFloor) / (sectorCeiling - sectorFloor) * 88;
+  const dataStatus = daily.dataStatus ?? { status: "live", marketSource: "行情", stockSource: "行情", sectorSource: "行情", newsSource: "实时" };
+  document.body.classList.toggle("data-stale", dataStatus.status === "stale");
+  document.body.classList.toggle("data-partial", dataStatus.status === "partial");
   $("#trade-date").textContent = `${dateText(daily.tradeDate)} · 收盘数据`;
   $("#hero-date").textContent = daily.tradeDate.replaceAll("-", " · ");
   $("#generated-at").textContent = `生成 ${timeText(daily.generatedAt)}`;
+  $("#data-status").textContent = dataStatus.status === "stale" ? "行情更新异常 · 当前显示最近缓存" : dataStatus.status === "partial" ? "部分数据使用缓存" : dataStatus.marketSource === "东方财富" && dataStatus.stockSource === "东方财富" ? "行情实时更新" : "行情实时 · 备用源已接管";
+  $("#data-status").title = `指数：${dataStatus.marketSource}；个股：${dataStatus.stockSource}；板块：${dataStatus.sectorSource}；资讯：${dataStatus.newsSource}`;
   $("#summary").innerHTML = `
     <article data-index="01"><span>核心指数红盘</span><b>${daily.summary.positiveIndices}<small> / ${daily.indices.length}</small></b><em>市场广度</em></article>
     <article data-index="02"><span>指数平均涨跌</span><b class="${tone(daily.summary.averageIndexChange)}">${signed(daily.summary.averageIndexChange)}<small>%</small></b><em>等权口径</em></article>
