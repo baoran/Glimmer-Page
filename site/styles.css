@@ -207,6 +207,10 @@ nav button.active span { color: rgba(255, 255, 255, .65); }
 .update-strip b { color: var(--ink); font-size: 13px; }
 .update-strip em { margin-left: auto; color: var(--muted); font-size: 11px; font-style: normal; }
 .update-strip em::before { content: ""; width: 5px; height: 5px; display: inline-block; margin: 0 7px 2px 0; background: var(--green); border-radius: 50%; }
+.data-partial .update-strip em, .data-stale .update-strip em { color: var(--red); font-weight: 700; }
+.data-partial .update-strip em::before, .data-stale .update-strip em::before { background: var(--red); }
+.data-stale .status-dot { background: var(--red); animation: stale-pulse 1.6s ease-in-out infinite; }
+@keyframes stale-pulse { 50% { opacity: .38; box-shadow: 0 0 0 8px color-mix(in srgb, var(--red) 5%, transparent); } }
 
 .view { display: none; padding-top: 10px; }
 .view.active { display: block; animation: view-in .42s cubic-bezier(.2, .75, .25, 1) both; }

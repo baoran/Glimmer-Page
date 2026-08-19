@@ -3,8 +3,13 @@ import { resolve } from "node:path";
 
 const ROOT = resolve(process.cwd(), "site", "data");
 const EAST_LIST = "https://82.push2.eastmoney.com/api/qt/clist/get";
+const SINA_LIST = "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData";
+const TENCENT_QUOTES = "https://qt.gtimg.cn/q=";
+const THS_SECTORS = "https://q.10jqka.com.cn/thshy/index/field/199112/order/desc";
 const STOCK_FS = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048";
 const HEADERS = { Accept: "application/json,text/plain,*/*", Referer: "https://finance.sina.com.cn/stock/", "User-Agent": "Mozilla/5.0" };
+const TENCENT_HEADERS = { ...HEADERS, Referer: "https://gu.qq.com/" };
+const THS_HEADERS = { ...HEADERS, Referer: "https://q.10jqka.com.cn/" };
 const INDEXES = [
   ["1.000001", "sh000001", "上证指数", "000001"], ["0.399001", "sz399001", "深证成指", "399001"],
   ["0.399006", "sz399006", "创业板指", "399006"], ["1.000300", "sh000300", "沪深300", "000300"], ["1.000688", "sh000688", "科创50", "000688"],
@@ -28,6 +33,23 @@ async function json(url, headers = HEADERS) {
   }
   throw lastError;
 }
+
+async function text(url, headers = HEADERS, encoding = "utf-8") {
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch(url, { headers });
+      if (!response.ok) throw new Error(`${response.status} ${url}`);
+      return new TextDecoder(encoding).decode(await response.arrayBuffer());
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
+    }
+  }
+  throw lastError;
+}
+
+const settledError = (result) => result.status === "rejected" ? String(result.reason?.message ?? result.reason) : "返回数据不完整";
 
 function eastUrl({ page = 1, size = 500, fs = STOCK_FS, sort = "f12" } = {}) {
   const query = new URLSearchParams({ pn: String(page), pz: String(size), po: "1", np: "1", fltt: "2", invt: "2", fid: sort, fs, fields: "f2,f3,f4,f5,f6,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f124" });
@@ -74,6 +96,104 @@ async function fetchIndices() {
 async function fetchSectors() {
   const payload = await json(eastUrl({ size: 100, fs: "m:90+t:2", sort: "f3" }));
   return (payload.data?.diff ?? []).map((row) => ({ name: String(row.f14 ?? "—"), code: String(row.f12 ?? ""), price: n(row.f2), change: n(row.f3), turnover: n(row.f6) }));
+}
+
+async function fetchSinaStocks(previousStocks) {
+  const previous = new Map(previousStocks.map((stock) => [stock.secid, stock]));
+  const rows = [];
+  for (let start = 1; start <= 72; start += 8) {
+    const pages = await Promise.all(Array.from({ length: 8 }, async (_, index) => {
+      const query = new URLSearchParams({ page: String(start + index), num: "100", sort: "symbol", asc: "1", node: "hs_a", symbol: "", _s_r_a: "page" });
+      return JSON.parse(await text(`${SINA_LIST}?${query}`, HEADERS, "gbk"));
+    }));
+    rows.push(...pages.flat());
+    if (pages.some((page) => page.length < 100)) break;
+  }
+  const stocks = [...new Map(rows.map((row) => [String(row.symbol ?? ""), row])).values()].map((row) => {
+    const secid = String(row.symbol ?? "");
+    const old = previous.get(secid) ?? {};
+    const livePrice = n(row.trade);
+    return {
+      name: String(row.name ?? old.name ?? "—"), code: String(row.code ?? old.code ?? ""), secid,
+      price: livePrice > 0 ? livePrice : n(old.price), change: livePrice > 0 ? n(row.changepercent) : n(old.change), changeAmount: livePrice > 0 ? n(row.pricechange) : n(old.changeAmount),
+      volume: n(row.volume, old.volume), turnover: n(row.amount, old.turnover), turnoverRate: n(row.turnoverratio, old.turnoverRate), volumeRatio: n(old.volumeRatio), pe: n(row.per, old.pe),
+      high: n(row.high) || n(old.high), low: n(row.low) || n(old.low), open: n(row.open) || n(old.open), previousClose: n(row.settlement) || n(old.previousClose),
+      marketCap: n(row.mktcap) > 0 ? n(row.mktcap) * 1e4 : n(old.marketCap), floatMarketCap: n(row.nmc) > 0 ? n(row.nmc) * 1e4 : n(old.floatMarketCap),
+    };
+  }).filter((stock) => stock.code);
+  if (stocks.length < 3000) throw new Error(`新浪行情仅返回 ${stocks.length} 只股票`);
+  return stocks;
+}
+
+function parseTencentQuotes(payload) {
+  return [...payload.matchAll(/v_([^=]+)="([^"]*)";/g)].flatMap((match) => {
+    const fields = match[2].split("~");
+    if (fields.length < 50 || !fields[2]) return [];
+    const turnoverParts = String(fields[35] ?? "").split("/");
+    return [{
+      secid: match[1], name: fields[1], code: fields[2], price: n(fields[3]), previousClose: n(fields[4]), open: n(fields[5]),
+      volume: n(fields[36] || fields[6]) * 100, turnover: n(turnoverParts[2], n(fields[37]) * 1e4), turnoverRate: n(fields[38]), pe: n(fields[39]),
+      changeAmount: n(fields[31]), change: n(fields[32]), high: n(fields[33]), low: n(fields[34]), volumeRatio: n(fields[49]),
+      marketCap: n(fields[44]) * 1e8, floatMarketCap: n(fields[45]) * 1e8, stamp: String(fields[30] ?? ""),
+    }];
+  });
+}
+
+async function fetchTencentQuoteRows(symbols) {
+  const rows = [];
+  const batches = chunks([...new Set(symbols.filter(Boolean))], 80);
+  for (const group of chunks(batches, 6)) {
+    const payloads = await Promise.all(group.map((batch) => text(`${TENCENT_QUOTES}${batch.join(",")}`, TENCENT_HEADERS, "gbk")));
+    rows.push(...payloads.flatMap(parseTencentQuotes));
+  }
+  return rows;
+}
+
+async function enrichStocksWithTencent(stocks) {
+  const rows = await fetchTencentQuoteRows(stocks.map((stock) => stock.secid));
+  const quotes = new Map(rows.map((row) => [row.secid, row]));
+  let updated = 0;
+  const items = stocks.map((stock) => {
+    const quote = quotes.get(stock.secid);
+    if (!quote || quote.price <= 0) return stock;
+    updated += 1;
+    const { stamp, ...liveQuote } = quote;
+    return { ...stock, ...liveQuote, name: quote.name || stock.name, code: quote.code || stock.code, marketCap: quote.marketCap || stock.marketCap, floatMarketCap: quote.floatMarketCap || stock.floatMarketCap, volumeRatio: quote.volumeRatio || stock.volumeRatio };
+  });
+  if (updated < 3000) throw new Error(`腾讯行情仅更新 ${updated} 只股票`);
+  const stamp = rows.map((row) => row.stamp).filter((value) => /^\d{8}/.test(value)).sort().at(-1) ?? "";
+  return { items, tradeDate: stamp ? `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}` : "" };
+}
+
+async function fetchTencentIndices() {
+  const rows = await fetchTencentQuoteRows(INDEXES.map(([, secid]) => secid));
+  const quotes = new Map(rows.map((row) => [row.secid, row]));
+  const indices = INDEXES.flatMap(([, secid, name, code]) => {
+    const row = quotes.get(secid);
+    return row && row.price > 0 ? [{ name, code, secid, price: row.price, changeAmount: row.changeAmount, change: row.change, volume: row.volume, high: row.high, low: row.low, open: row.open, previousClose: row.previousClose }] : [];
+  });
+  if (indices.length < 3) throw new Error(`腾讯行情仅返回 ${indices.length} 个指数`);
+  const stamp = rows.map((row) => row.stamp).filter((value) => /^\d{8}/.test(value)).sort().at(-1) ?? "";
+  return { indices, tradeDate: stamp ? `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}` : "" };
+}
+
+function parseThsSectors(payload) {
+  const body = payload.match(/<tbody>([\s\S]*?)<\/tbody>/)?.[1] ?? "";
+  return [...body.matchAll(/<tr>([\s\S]*?)<\/tr>/g)].flatMap((match) => {
+    const cells = [...match[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((cell) => clean(cell[1]));
+    const code = match[1].match(/thshy\/detail\/code\/(\d+)/)?.[1] ?? "";
+    return cells.length >= 9 && code ? [{ name: cells[1], code, price: n(cells[8]), change: n(cells[2]), turnover: n(cells[4]) * 1e8 }] : [];
+  });
+}
+
+async function fetchThsSectors() {
+  const first = await text(`${THS_SECTORS}/page/1/ajax/1/`, THS_HEADERS, "gbk");
+  const pages = Math.max(1, n(first.match(/page_info">\d+\/(\d+)/)?.[1], 1));
+  const payloads = [first];
+  for (let page = 2; page <= pages; page += 1) payloads.push(await text(`${THS_SECTORS}/page/${page}/ajax/1/`, THS_HEADERS, "gbk"));
+  const rows = payloads.flatMap(parseThsSectors);
+  if (rows.length < 50) throw new Error(`同花顺仅返回 ${rows.length} 个行业板块`);
+  return rows;
 }
 
 const category = (title) => /公司|业绩|回购|增持|减持|重组|上市|公告/.test(title) ? "公司" : /政策|央行|证监|监管|国务院|交易所/.test(title) ? "政策" : /板块|行业|科技|消费|医药|金融|能源|芯片|人工智能|概念/.test(title) ? "行业" : "市场";
@@ -156,22 +276,52 @@ async function main() {
   const previousDaily = await readJson(resolve(ROOT, "daily.json"), {});
   const previousStocks = await readJson(resolve(ROOT, "stocks.json"), {});
   const [marketResult, stocksResult, sectorsResult] = await Promise.allSettled([fetchIndices(), fetchStocks(), fetchSectors()]);
-  const marketLive = marketResult.status === "fulfilled" && marketResult.value.indices.length >= 3;
-  const stocksLive = stocksResult.status === "fulfilled" && stocksResult.value.length >= 3000;
-  const sectorsLive = sectorsResult.status === "fulfilled" && sectorsResult.value.length >= 12;
-  const market = marketLive ? marketResult.value : { tradeDate: previousDaily.tradeDate, indices: previousDaily.indices ?? [] };
-  const stocks = stocksLive ? stocksResult.value : (previousStocks.items ?? []);
-  const sectorRows = sectorsLive ? sectorsResult.value : (previousDaily.sectors ?? []);
+  let marketSource = "东方财富";
+  let stockSource = "东方财富";
+  let sectorSource = "东方财富";
+  let market = marketResult.status === "fulfilled" && marketResult.value.indices.length >= 3 ? marketResult.value : null;
+  let stocks = stocksResult.status === "fulfilled" && stocksResult.value.length >= 3000 ? stocksResult.value : null;
+  let sectorRows = sectorsResult.status === "fulfilled" && sectorsResult.value.length >= 12 ? sectorsResult.value : null;
+
+  if (!market) {
+    console.warn(`东方财富指数不可用：${settledError(marketResult)}；切换腾讯行情。`);
+    try { market = await fetchTencentIndices(); marketSource = "腾讯行情"; }
+    catch (error) { console.warn(`腾讯指数不可用：${error.message}`); market = { tradeDate: previousDaily.tradeDate, indices: previousDaily.indices ?? [] }; marketSource = "缓存"; }
+  }
+  if (!stocks) {
+    console.warn(`东方财富个股不可用：${settledError(stocksResult)}；切换新浪财经。`);
+    try {
+      stocks = await fetchSinaStocks(previousStocks.items ?? []);
+      stockSource = "新浪财经";
+      try {
+        const enriched = await enrichStocksWithTencent(stocks);
+        stocks = enriched.items;
+        stockSource = "新浪财经 + 腾讯行情";
+        if (!market.tradeDate && enriched.tradeDate) market.tradeDate = enriched.tradeDate;
+      } catch (error) { console.warn(`腾讯个股增强不可用：${error.message}`); }
+    } catch (error) { console.warn(`新浪个股不可用：${error.message}`); stocks = previousStocks.items ?? []; stockSource = "缓存"; }
+  }
+  if (!sectorRows) {
+    console.warn(`东方财富板块不可用：${settledError(sectorsResult)}；切换同花顺行业。`);
+    try { sectorRows = await fetchThsSectors(); sectorSource = "同花顺"; }
+    catch (error) { console.warn(`同花顺板块不可用：${error.message}`); sectorRows = previousDaily.sectors ?? []; sectorSource = "缓存"; }
+  }
   if (stocks.length < 3000 || market.indices.length < 3) throw new Error("行情数据不完整，停止覆盖 Pages 数据");
-  const sectors = sectorsLive ? [...sectorRows.slice(0, 8), ...sectorRows.slice(-4).reverse()] : sectorRows;
+  const sectors = sectorSource !== "缓存" ? [...sectorRows.slice(0, 8), ...sectorRows.slice(-4).reverse()] : sectorRows;
   const newsResult = await Promise.allSettled([fetchNews(market.tradeDate)]);
   const newsLive = newsResult[0].status === "fulfilled" && newsResult[0].value.length >= 5;
   const news = newsLive ? newsResult[0].value : (previousDaily.news ?? []);
   const generatedAt = new Date().toISOString();
+  const essentialLive = marketSource !== "缓存" && stockSource !== "缓存";
+  const dataStatus = {
+    status: !essentialLive ? "stale" : sectorSource === "缓存" ? "partial" : "live",
+    marketSource, stockSource, sectorSource, newsSource: newsLive ? "实时" : "缓存",
+  };
   const daily = {
     contentVersion: 1, tradeDate: market.tradeDate, generatedAt, indices: market.indices, sectors,
     totalStocks: stocks.length, recommendations: choose(stocks), news,
     summary: { averageIndexChange: market.indices.reduce((sum, x) => sum + x.change, 0) / market.indices.length, positiveIndices: market.indices.filter((x) => x.change > 0).length, topSector: sectors[0]?.name ?? "—" },
+    dataStatus,
   };
   const archivePath = resolve(ROOT, "archive.json");
   const archive = await readJson(archivePath, []);
@@ -186,7 +336,13 @@ async function main() {
     writeFile(archivePath, `${JSON.stringify(nextArchive)}\n`),
     writeFile(historyPath, `${JSON.stringify(nextHistory)}\n`),
   ]);
-  console.log(`微光 Pages 数据已更新：${daily.tradeDate}，${stocks.length} 只股票，${news.length} 条资讯，${daily.recommendations.length} 种战法；行情 ${marketLive && stocksLive && sectorsLive ? "实时" : "缓存兜底"}，资讯 ${newsLive ? "实时" : "缓存兜底"}`);
+  console.log(`微光 Pages 数据已更新：${daily.tradeDate}，${stocks.length} 只股票，${news.length} 条资讯，${daily.recommendations.length} 种战法；指数 ${marketSource}，个股 ${stockSource}，板块 ${sectorSource}，资讯 ${dataStatus.newsSource}`);
+  if (dataStatus.status === "stale") {
+    console.error(`::error title=行情更新失败::指数 ${marketSource}，个股 ${stockSource}；页面已保留最近缓存。`);
+    process.exitCode = 2;
+  } else if (dataStatus.status === "partial") {
+    console.warn(`::warning title=部分行情使用缓存::板块数据源 ${sectorSource}。`);
+  }
 }
 
 await main();
