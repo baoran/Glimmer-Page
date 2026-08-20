@@ -24,7 +24,7 @@
     <header class="topbar">
       <button class="brand" data-view="overview" aria-label="Glimmer home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-copy"><strong>Glimmer</strong><small>MARKET INTELLIGENCE</small></span></button>
       <nav aria-label="主导航">
-        <button data-view="news"><span>01</span>每日资讯</button><button data-view="stocks"><span>02</span>个股信息</button><button data-view="ideas"><span>03</span>选股建议</button>
+        <button data-view="news"><span>01</span>每日资讯</button><button data-view="stocks"><span>02</span>个股信息</button><button data-view="ideas"><span>03</span>周期选股</button>
       </nav>
       <button id="theme" class="theme" aria-label="切换日间模式"><i aria-hidden="true">☀</i><span>日间</span></button>
     </header>
@@ -69,8 +69,32 @@
     </section>
 
     <section class="view" id="ideas">
-      <div class="page-heading"><div><p>MULTI-STRATEGY SELECTION</p><h1>选股建议</h1><small>以多种市场战法交叉观察，避免单一指标偏差</small></div><span>六种战法 · 每种一只</span></div>
-      <div class="disclaimer"><span aria-hidden="true">!</span><p><b>观察名单，不是买入指令。</b> 规则模型基于当日收盘数据生成，未纳入隔夜公告、次日跳空等变量。</p></div>
+      <div class="page-heading"><div><p>FORWARD FORECAST LAB</p><h1>多周期选股与验证</h1><small>六个持有周期，每日生成候选并前向记录真实表现</small></div><span>6 个周期 · 每期 5 只 · 每日复盘</span></div>
+      <div class="disclaimer"><span aria-hidden="true">!</span><p><b>概率观察，不是“必涨”承诺或买入指令。</b> 当前版本以预测日收盘价作为观察基准，只做前向验证；新闻仅作标题级核验，未纳入次日可成交价、连续历史、财报质量和公告全文。</p></div>
+
+      <div class="forecast-summary" id="forecast-summary" aria-live="polite"></div>
+      <div class="forecast-journal">
+        <div class="journal-calendar">
+          <div class="calendar-head"><div><p>RESEARCH CALENDAR</p><h2 id="calendar-title">研究日历</h2></div><div><button id="calendar-prev" aria-label="上一个月">←</button><button id="calendar-next" aria-label="下一个月">→</button></div></div>
+          <div class="calendar-week"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+          <div class="calendar-grid" id="forecast-calendar" aria-label="预测日志日历"></div>
+        </div>
+        <div class="journal-day" id="journal-day" aria-live="polite"></div>
+      </div>
+      <div class="backtest-preview" id="backtest-preview" aria-live="polite"></div>
+      <div class="forecast-controls">
+        <div><p>FORECAST HORIZON</p><h2>选择观察周期</h2></div>
+        <div class="horizon-tabs" id="horizon-tabs" role="tablist" aria-label="预测周期"></div>
+      </div>
+      <div class="forecast-panel">
+        <div class="forecast-panel-head"><div><p id="forecast-kicker">CURRENT PICKS</p><h2 id="forecast-title">本期候选</h2></div><span id="forecast-meta"></span></div>
+        <div class="forecast-list" id="forecast-list" aria-live="polite"></div>
+      </div>
+
+      <div class="vector-method" id="vector-method"></div>
+      <div class="forecast-report" id="forecast-report" aria-live="polite"></div>
+
+      <div class="section-heading ideas-heading"><div><p>DAILY STRATEGY CROSS-CHECK</p><h2>当日战法观察</h2></div><span>保留原六战法，作为短线交叉参考</span></div>
       <div class="ideas" id="ideas-grid"></div>
     </section>
 

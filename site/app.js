@@ -3,6 +3,7 @@ const $$ = (selector) => [...document.querySelectorAll(selector)];
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 const signed = (value, digits = 2) => `${value > 0 ? "+" : ""}${Number(value || 0).toFixed(digits)}`;
 const tone = (value) => value > 0 ? "up" : value < 0 ? "down" : "";
+const average = (values) => values.length ? values.reduce((sum, value) => sum + Number(value || 0), 0) / values.length : 0;
 const compact = (value) => { const n = Math.abs(Number(value || 0)); const s = value < 0 ? "-" : ""; return n >= 1e12 ? `${s}${(n / 1e12).toFixed(2)}万亿` : n >= 1e8 ? `${s}${(n / 1e8).toFixed(1)}亿` : n >= 1e4 ? `${s}${(n / 1e4).toFixed(1)}万` : `${Number(value || 0).toFixed(0)}`; };
 const dateText = (value) => { const [y, m, d] = value.split("-"); return `${y}年${Number(m)}月${Number(d)}日`; };
 const dateChip = (value) => new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", weekday: "short", timeZone: "Asia/Shanghai" }).format(new Date(`${value}T00:00:00+08:00`)).replaceAll("/", ".");
@@ -11,7 +12,7 @@ const safeUrl = (value) => { try { const url = new URL(value); return ["http:", 
 const bars = (seed, rising) => { let h = [...seed].reduce((sum, char) => sum + char.charCodeAt(0), 0); return Array.from({ length: 9 }, (_, i) => { h = (h * 9301 + 49297) % 233280; return Math.min(96, Math.round(25 + h / 233280 * 45 + (rising ? i : 8 - i) * 3)); }); };
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-const state = { daily: null, archive: [], stocks: [], history: [], newsDate: "", newsSource: "全部", query: "", sort: "change", descending: true, market: "all", priceRange: "all", capRange: "all", peRange: "all", activity: "all", page: 1 };
+const state = { daily: null, archive: [], stocks: [], history: [], forecasts: null, forecastHorizon: "week", forecastDate: "", forecastMonth: "", newsDate: "", newsSource: "全部", query: "", sort: "change", descending: true, market: "all", priceRange: "all", capRange: "all", peRange: "all", activity: "all", page: 1 };
 
 function setView(view) {
   $$(".view").forEach((node) => node.classList.toggle("active", node.id === view));
@@ -124,10 +125,111 @@ function renderIdeas() {
   $("#ideas-grid").innerHTML = state.daily.recommendations.length ? state.daily.recommendations.map((item, index) => `<article class="idea"><div class="idea-top"><span>STRATEGY ${String(index + 1).padStart(2, "0")}</span><span class="idea-score">匹配度<b>${item.score}</b></span></div><h3>${esc(item.name)}</h3><small>${esc(item.code)}</small><div class="idea-price"><b>${item.price.toFixed(2)}</b><span class="${tone(item.change)}">${signed(item.change)}%</span></div><div class="metrics"><span>换手<b>${item.turnoverRate.toFixed(2)}%</b></span><span>量比<b>${item.volumeRatio.toFixed(2)}</b></span><span>PE<b>${item.pe.toFixed(1)}</b></span></div><span class="strategy">${esc(item.style)}</span><ul>${item.reasons.map((reason) => `<li>${esc(reason)}</li>`).join("")}</ul><p><b>主要风险：</b>${esc(item.risks.join("、"))}</p></article>`).join("") : `<div class="empty">正在生成多战法观察名单…</div>`;
 }
 
+function renderForecastCalendar(data) {
+  const dates = [...new Set([...data.runs.map((item) => item.asOfTradeDate), ...data.reports.map((item) => item.tradeDate)])].sort();
+  if (!state.forecastDate || !dates.includes(state.forecastDate)) state.forecastDate = dates.at(-1);
+  if (!state.forecastMonth) state.forecastMonth = state.forecastDate.slice(0, 7);
+  const [year, month] = state.forecastMonth.split("-").map(Number);
+  const firstWeekday = (new Date(`${state.forecastMonth}-01T00:00:00+08:00`).getDay() + 6) % 7;
+  const dayCount = new Date(year, month, 0).getDate();
+  const dateSet = new Set(dates);
+  const runByDate = new Map(data.runs.map((run) => [run.asOfTradeDate, run]));
+  $("#calendar-title").textContent = `${year}年${month}月`;
+  $("#forecast-calendar").innerHTML = Array.from({ length: 42 }, (_, index) => {
+    const day = index - firstWeekday + 1;
+    if (day < 1 || day > dayCount) return `<span class="calendar-empty"></span>`;
+    const date = `${state.forecastMonth}-${String(day).padStart(2, "0")}`;
+    const available = dateSet.has(date);
+    const replay = runByDate.get(date)?.modelVersion?.startsWith("historical-replay");
+    return `<button data-forecast-date="${date}" class="${available ? "has-log" : ""} ${replay ? "replay-log" : ""} ${date === state.forecastDate ? "active" : ""}" ${available ? "" : "disabled"} aria-label="${date}${available ? replay ? "，历史回放日志" : "，正式前向日志" : "，无日志"}"><span>${day}</span>${available ? "<i></i>" : ""}</button>`;
+  }).join("");
+  const run = data.runs.find((item) => item.asOfTradeDate === state.forecastDate);
+  const report = data.reports.find((item) => item.tradeDate === state.forecastDate);
+  const replay = run?.modelVersion?.startsWith("historical-replay");
+  $("#journal-day").innerHTML = `<div><p>${replay ? "HISTORICAL REPLAY DAY" : "SELECTED RESEARCH DAY"}</p><h2>${dateText(state.forecastDate)}</h2><small>${replay ? "橙色日期为体验回放，不进入正式模型经验池" : "红色日期为上线后的正式前向日志"}</small></div><div class="journal-stats"><span>候选记录<b>${run?.predictions.length ?? 0}</b></span><span>日志类型<b>${replay ? "历史回放" : "正式前向"}</b></span><span>数据状态<b>${esc(report?.sourceStatus ?? "—")}</b></span></div>`;
+}
+
+function renderBacktestPreview(data) {
+  const panel = $("#backtest-preview");
+  const preview = data.backtestPreview;
+  if (!preview) { panel.innerHTML = ""; panel.hidden = true; return; }
+  panel.hidden = false;
+  const predictions = new Map(data.runs.filter((run) => run.modelVersion === preview.modelVersion).flatMap((run) => run.predictions.map((item) => [item.id, item])));
+  const matured = data.tracking.filter((item) => item.status === "matured" && predictions.has(item.predictionId));
+  const horizonName = new Map(data.horizons.map((item) => [item.id, item.label]));
+  const stats = data.horizons.map((horizon) => {
+    const rows = matured.filter((item) => item.horizonId === horizon.id);
+    return { id: horizon.id, label: horizonName.get(horizon.id), count: rows.length, winRate: rows.length ? rows.filter((item) => item.outcome === "win").length / rows.length : 0, mean: average(rows.map((item) => item.returnPct)) };
+  });
+  panel.innerHTML = `<div class="backtest-head"><div><p>BACKTEST EXPERIENCE PREVIEW</p><h2>前两周历史回放概览</h2><small>${esc(preview.dates[0])} 至 ${esc(preview.dates.at(-1))} · ${preview.dates.length} 个交易日 · ${predictions.size} 个候选</small></div><span>仅用于体验与流程检查，不计入正式前向胜率</span></div><div class="backtest-stats">${stats.map((item) => `<article><span>${esc(item.label)}</span><b>${item.count ? `${(item.winRate * 100).toFixed(1)}%` : "待到期"}</b><small>${item.count ? `${item.count} 个到期 · 均值 ${signed(item.mean)}%` : "观察周期尚未结束"}</small></article>`).join("")}</div><details><summary>查看回放口径与限制</summary><ul>${preview.limitations.map((item) => `<li>${esc(item)}</li>`).join("")}</ul></details>`;
+}
+
+function shiftForecastMonth(offset) {
+  const [year, month] = state.forecastMonth.split("-").map(Number);
+  const next = new Date(year, month - 1 + offset, 1);
+  state.forecastMonth = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
+  renderForecasts();
+}
+
+function renderForecasts() {
+  const data = state.forecasts;
+  if (!data?.runs?.length) {
+    $("#forecast-summary").innerHTML = `<div class="empty">预测日志将在下一次数据更新后生成。</div>`;
+    $("#horizon-tabs").innerHTML = "";
+    $("#forecast-list").innerHTML = `<div class="empty">暂无多周期候选。</div>`;
+    $("#forecast-calendar").innerHTML = "";
+    $("#journal-day").innerHTML = "";
+    $("#vector-method").innerHTML = "";
+    $("#forecast-report").innerHTML = "";
+    return;
+  }
+  renderForecastCalendar(data);
+  renderBacktestPreview(data);
+  const run = data.runs.find((item) => item.asOfTradeDate === state.forecastDate) ?? data.runs[0];
+  const report = data.reports.find((item) => item.tradeDate === state.forecastDate) ?? data.reports[0];
+  const isReplay = run.modelVersion?.startsWith("historical-replay");
+  const horizon = data.horizons.find((item) => item.id === state.forecastHorizon) ?? data.horizons[0];
+  state.forecastHorizon = horizon.id;
+  const tracking = new Map(data.tracking.map((item) => [item.predictionId, item]));
+  const picks = run.predictions.filter((item) => item.horizonId === horizon.id);
+  const horizonReport = report?.byHorizon?.find((item) => item.horizonId === horizon.id);
+  const matured = report?.summary?.cumulativeMatured ?? 0;
+  $("#forecast-summary").innerHTML = `
+    <article><span>${isReplay ? "回放模型" : "模型版本"}</span><b>${isReplay ? "历史量价回放 v1" : esc(data.model.label)}</b><small>${esc(run.asOfTradeDate)} 参数快照</small></article>
+    <article><span>当日新增样本</span><b>${report?.newPredictionCount ?? 0}<em> 个</em></b><small>六周期分别排名</small></article>
+    <article><span>观察中</span><b>${report?.activeCount ?? 0}<em> 个</em></b><small>正收益占比 ${((report?.summary?.positiveActiveRate ?? 0) * 100).toFixed(1)}%</small></article>
+    <article><span>累计到期验证</span><b>${matured}<em> 个</em></b><small>${matured ? `胜率 ${((report.summary.cumulativeWinRate ?? 0) * 100).toFixed(1)}%` : "等待首批样本到期"}</small></article>`;
+  $("#horizon-tabs").innerHTML = data.horizons.map((item) => `<button role="tab" data-horizon="${esc(item.id)}" class="${item.id === horizon.id ? "active" : ""}" aria-selected="${item.id === horizon.id}"><b>${esc(item.label)}</b><small>${item.sessions} 个交易日</small></button>`).join("");
+  $("#forecast-title").textContent = `${horizon.label}${isReplay ? "历史回放" : "上涨候选"}`;
+  $("#forecast-kicker").textContent = `${horizon.sessions} TRADING SESSIONS`;
+  $("#forecast-meta").textContent = `${dateText(run.asOfTradeDate)}${isReplay ? "回放" : "生成"} · 追踪截至 ${dateText(data.latestTradeDate)}`;
+  $("#forecast-list").innerHTML = picks.map((item) => {
+    const mark = tracking.get(item.id) ?? { status: "active", elapsedSessions: 0, lastPrice: item.entryPrice, returnPct: 0 };
+    const progress = Math.min(100, mark.elapsedSessions / horizon.sessions * 100);
+    const statusText = mark.status === "matured" ? "已到期验证" : mark.status === "missing-price" ? "价格暂缺" : `追踪中 ${mark.elapsedSessions}/${horizon.sessions}`;
+    return `<article class="forecast-pick">
+      <div class="forecast-rank"><b>${String(item.rank).padStart(2, "0")}</b><span>${esc(statusText)}</span></div>
+      <div class="forecast-stock"><h3>${esc(item.name)}</h3><small>${esc(item.code)} · 综合分 ${item.score}</small><div class="forecast-prices"><span>观察价<b>${item.entryPrice.toFixed(2)}</b></span><span>最新价<b>${Number(mark.lastPrice ?? item.entryPrice).toFixed(2)}</b></span><span>浮动收益<b class="${tone(mark.returnPct)}">${signed(mark.returnPct)}%</b></span></div><div class="forecast-progress"><i style="width:${progress.toFixed(1)}%"></i></div></div>
+      <div class="vector-bars">${data.model.dimensions.map((dimension) => `<span title="${esc(dimension.description)}"><small>${esc(dimension.label)}</small><i><b style="width:${item.vector[dimension.id]}%"></b></i><em>${item.vector[dimension.id]}</em></span>`).join("")}</div>
+      <div class="forecast-logic"><h4>为什么选择它</h4><p class="selection-thesis">${esc(item.analysis?.thesis ?? "依据当前周期权重与综合向量排名入选。")}</p><div class="contribution-list">${(item.analysis?.contributions ?? []).slice(0, 3).map((factor) => `<span><b>${esc(factor.label)}</b><em>${factor.contribution.toFixed(1)} 分贡献</em></span>`).join("")}</div><ul>${item.reasons.map((reason) => `<li>${esc(reason)}</li>`).join("")}</ul><div class="news-proof"><b>资讯核验</b><span>${esc(item.analysis?.news?.summary ?? "暂无资讯证据")}</span>${(item.analysis?.news?.direct?.length ? item.analysis.news.direct : item.analysis?.news?.market?.slice(0, 1) ?? []).map((news) => `<small>${esc(news.source)} · ${esc(news.title)}</small>`).join("")}</div><p class="risk-line"><b>风险</b>${esc(item.risks.join("；"))}</p></div>
+    </article>`;
+  }).join("");
+  $("#vector-method").innerHTML = `<div><p>MODEL VECTOR</p><h2>评分向量如何推理</h2><small>${esc(data.model.principle)}</small></div><div class="vector-legend">${data.model.dimensions.map((item) => `<span><b>${esc(item.label)}</b>${esc(item.description)}</span>`).join("")}</div><p class="method-limit"><b>边界：</b>${esc(data.model.limitation)} 各周期改变向量权重，短周期更重动能与参与度，长周期更重估值、流动性与稳定性。</p>`;
+  const horizonName = new Map(data.horizons.map((item) => [item.id, item.label]));
+  const reflectionLabels = { market: "一省 · 市场", news: "二省 · 资讯", model: "三省 · 模型", next: "明日经验" };
+  $("#forecast-report").innerHTML = `<div class="report-head"><div><p>DAILY FORWARD REVIEW</p><h2>${dateText(report.tradeDate)} · 每日三省</h2></div><span>行情 + 资讯 + 模型经验，只使用当时可见数据</span></div>
+    <div class="reflection-grid">${Object.entries(reflectionLabels).map(([key, label]) => `<article><span>${label}</span><p>${esc(report.reflection?.[key] ?? "等待报告生成")}</p></article>`).join("")}</div>
+    <div class="context-review"><div><h3>市场切片</h3><p>领涨指数 <b>${esc(report.contextReview?.market?.leadingIndex?.name ?? "—")}</b> <span class="${tone(report.contextReview?.market?.leadingIndex?.change)}">${signed(report.contextReview?.market?.leadingIndex?.change)}%</span></p><p>强势板块 ${(report.contextReview?.market?.leadingSectors ?? []).map((item) => `<b>${esc(item.name)} ${signed(item.change)}%</b>`).join(" · ")}</p></div><div><h3>今日资讯证据</h3>${(report.contextReview?.news?.headlines ?? []).slice(0, 3).map((item) => `<p><span>${esc(item.source)}</span>${esc(item.title)}</p>`).join("")}</div></div>
+    <div class="report-narrative">${report.narrative.map((item, index) => `<p><b>${String(index + 1).padStart(2, "0")}</b>${esc(item)}</p>`).join("")}</div>
+    <div class="report-table-wrap"><table class="report-table"><thead><tr><th>周期</th><th>观察中</th><th>浮动为正</th><th>平均浮动</th><th>累计到期</th><th>到期胜率</th><th>到期均值</th></tr></thead><tbody>${report.byHorizon.map((item) => `<tr class="${item.horizonId === horizon.id ? "selected" : ""}"><td>${esc(horizonName.get(item.horizonId))}</td><td>${item.active}</td><td>${item.positiveActive}</td><td class="${tone(item.averageFloatingReturnPct)}">${signed(item.averageFloatingReturnPct)}%</td><td>${item.matured}</td><td>${item.matured ? `${(item.winRate * 100).toFixed(1)}%` : "—"}</td><td class="${tone(item.averageRealizedReturnPct)}">${item.matured ? `${signed(item.averageRealizedReturnPct)}%` : "—"}</td></tr>`).join("")}</tbody></table></div>
+    <p class="report-foot">当前所选${esc(horizon.label)}周期：${horizonReport?.active ?? 0} 个历史样本观察中；到期以第 ${horizon.sessions} 个后续有效交易日收盘价相对观察价是否上涨判定。</p>`;
+}
+
 async function init() {
-  const [daily, archive, stocks, historyData] = await Promise.all(["daily.json", "archive.json", "stocks.json", "history.json"].map(async (file) => { const response = await fetch(`./data/${file}?v=${Date.now()}`); if (!response.ok) throw new Error(file); return response.json(); }));
-  state.daily = daily; state.archive = archive; state.stocks = stocks.items; state.history = historyData;
-  renderOverview(); renderNews(); renderStocks(); renderIdeas();
+  const load = async (file) => { const response = await fetch(`./data/${file}?v=${Date.now()}`); if (!response.ok) throw new Error(file); return response.json(); };
+  const [daily, archive, stocks, historyData, forecasts] = await Promise.all([load("daily.json"), load("archive.json"), load("stocks.json"), load("history.json"), load("forecasts.json").catch(() => null)]);
+  state.daily = daily; state.archive = archive; state.stocks = stocks.items; state.history = historyData; state.forecasts = forecasts;
+  renderOverview(); renderNews(); renderStocks(); renderIdeas(); renderForecasts();
 }
 
 $$('[data-view]').forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
@@ -156,6 +258,10 @@ $("#prev").addEventListener("click", () => { state.page = Math.max(1, state.page
 $("#next").addEventListener("click", () => { state.page += 1; renderStocks(); });
 $("#stock-rows").addEventListener("click", (event) => { const button = event.target.closest("button[data-secid]"); if (button) showHistory(button.dataset.secid); });
 $("#history-panel").addEventListener("click", (event) => { if (event.target.closest("#history-close")) $("#history-panel").hidden = true; });
+$("#horizon-tabs").addEventListener("click", (event) => { const button = event.target.closest("button[data-horizon]"); if (button) { state.forecastHorizon = button.dataset.horizon; renderForecasts(); } });
+$("#forecast-calendar").addEventListener("click", (event) => { const button = event.target.closest("button[data-forecast-date]"); if (button) { state.forecastDate = button.dataset.forecastDate; state.forecastMonth = state.forecastDate.slice(0, 7); renderForecasts(); } });
+$("#calendar-prev").addEventListener("click", () => shiftForecastMonth(-1));
+$("#calendar-next").addEventListener("click", () => shiftForecastMonth(1));
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") $("#history-panel").hidden = true; });
 const initialView = ["news", "stocks", "ideas"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview"; setView(initialView);
-init().catch(() => { $("#trade-date").textContent = "数据暂时未生成，请稍后刷新"; $$("#summary,#indices,#sectors,#news-list,#stock-rows,#ideas-grid").forEach((node) => node.innerHTML = `<div class="empty">首次 GitHub Actions 更新完成后将在这里显示数据。</div>`); });
+init().catch(() => { $("#trade-date").textContent = "数据暂时未生成，请稍后刷新"; $$("#summary,#indices,#sectors,#news-list,#stock-rows,#ideas-grid,#forecast-summary,#forecast-list").forEach((node) => node.innerHTML = `<div class="empty">首次 GitHub Actions 更新完成后将在这里显示数据。</div>`); });

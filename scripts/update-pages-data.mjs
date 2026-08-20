@@ -15,10 +15,32 @@ const INDEXES = [
   ["1.000001", "sh000001", "上证指数", "000001"], ["0.399001", "sz399001", "深证成指", "399001"],
   ["0.399006", "sz399006", "创业板指", "399006"], ["1.000300", "sh000300", "沪深300", "000300"], ["1.000688", "sh000688", "科创50", "000688"],
 ];
+const FORECAST_MODEL_VERSION = "horizon-vector-v2";
+const FORECAST_HORIZONS = [
+  { id: "week", label: "一周", sessions: 5, weights: { momentum: .25, participation: .25, liquidity: .16, valuation: .08, stability: .12, context: .14 } },
+  { id: "two-weeks", label: "两周", sessions: 10, weights: { momentum: .22, participation: .22, liquidity: .16, valuation: .12, stability: .14, context: .14 } },
+  { id: "month", label: "一个月", sessions: 20, weights: { momentum: .18, participation: .18, liquidity: .17, valuation: .18, stability: .16, context: .13 } },
+  { id: "quarter", label: "三个月", sessions: 60, weights: { momentum: .13, participation: .13, liquidity: .19, valuation: .24, stability: .20, context: .11 } },
+  { id: "half-year", label: "六个月", sessions: 120, weights: { momentum: .10, participation: .10, liquidity: .20, valuation: .27, stability: .23, context: .10 } },
+  { id: "year", label: "一年", sessions: 250, weights: { momentum: .08, participation: .08, liquidity: .22, valuation: .30, stability: .24, context: .08 } },
+];
+const VECTOR_DIMENSIONS = [
+  { id: "momentum", label: "价格动能", description: "当日涨跌幅及过热惩罚" },
+  { id: "participation", label: "交易参与", description: "量比与换手率的活跃程度" },
+  { id: "liquidity", label: "流动性", description: "成交额和市值承载能力" },
+  { id: "valuation", label: "估值约束", description: "正市盈率区间的相对吸引力" },
+  { id: "stability", label: "波动稳定", description: "日内振幅与规模稳定性" },
+  { id: "context", label: "情境修正", description: "指数广度、市场强弱与个股过热风险" },
+];
 const relevant = /A股|沪深|上证|深证|创业板|科创|北交所|股票|个股|涨停|跌停|股价|收盘|板块|上市|回购|业绩|证券|ETF|成交额|市值|公司|概念|资金|主力/;
 const n = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const chunks = (items, size) => Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, (i + 1) * size));
 const clean = (value = "") => value.replace(/<[^>]+>/g, "").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim();
+const clamp = (value, min = 0, max = 100) => Math.min(max, Math.max(min, value));
+const peak = (value, ideal, radius) => clamp(100 - Math.abs(value - ideal) / radius * 100);
+const rise = (value, min, max) => clamp((value - min) / Math.max(max - min, .001) * 100);
+const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+const median = (values) => { const sorted = [...values].sort((a, b) => a - b); return sorted.length ? sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2 : 0; };
 
 async function json(url, headers = HEADERS) {
   let lastError;
@@ -280,6 +302,256 @@ function choose(stocks) {
   });
 }
 
+function marketContextScore(market) {
+  const changes = market.indices.map((item) => item.change);
+  const breadth = changes.filter((value) => value > 0).length / Math.max(1, changes.length);
+  return clamp(50 + average(changes) * 8 + (breadth - .5) * 24, 20, 82);
+}
+
+function stockVector(stock, marketContext) {
+  const amplitude = stock.previousClose > 0 ? (stock.high - stock.low) / stock.previousClose * 100 : 10;
+  const closePosition = stock.high > stock.low ? (stock.price - stock.low) / (stock.high - stock.low) : .5;
+  const logTurnover = Math.log10(Math.max(1, stock.turnover));
+  const logMarketCap = Math.log10(Math.max(1, stock.marketCap));
+  const momentum = peak(stock.change, 3.2, 6.2) * .72 + clamp(closePosition * 100) * .28;
+  const participation = peak(stock.volumeRatio, 1.8, 4.2) * .55 + peak(stock.turnoverRate, 5.5, 17) * .45;
+  const liquidity = peak(logTurnover, 9.65, 2.2) * .62 + peak(logMarketCap, 11.15, 2.6) * .38;
+  const valuation = stock.pe > 0 ? peak(stock.pe, 22, 98) : 0;
+  const stability = peak(amplitude, 2.5, 10) * .66 + rise(logMarketCap, 9.4, 12.8) * .34;
+  const overheatPenalty = Math.max(0, stock.change - 6) * 4 + Math.max(0, stock.volumeRatio - 3.5) * 3;
+  return {
+    vector: {
+      momentum: clamp(momentum), participation: clamp(participation), liquidity: clamp(liquidity),
+      valuation: clamp(valuation), stability: clamp(stability), context: clamp(marketContext - overheatPenalty),
+    },
+    amplitude,
+  };
+}
+
+function forecastReasons(stock, vector, weights) {
+  const descriptions = {
+    momentum: `价格动能 ${Math.round(vector.momentum)}：当日涨幅 ${stock.change.toFixed(2)}%`,
+    participation: `交易参与 ${Math.round(vector.participation)}：量比 ${stock.volumeRatio.toFixed(2)}、换手 ${stock.turnoverRate.toFixed(2)}%`,
+    liquidity: `流动性 ${Math.round(vector.liquidity)}：成交额 ${(stock.turnover / 1e8).toFixed(1)} 亿`,
+    valuation: `估值约束 ${Math.round(vector.valuation)}：市盈率 ${stock.pe.toFixed(1)} 倍`,
+    stability: `波动稳定 ${Math.round(vector.stability)}：总市值 ${(stock.marketCap / 1e8).toFixed(0)} 亿`,
+    context: `情境修正 ${Math.round(vector.context)}：结合当日指数广度与过热惩罚`,
+  };
+  return Object.keys(weights).sort((a, b) => vector[b] * weights[b] - vector[a] * weights[a]).slice(0, 3).map((key) => descriptions[key]);
+}
+
+function buildExperienceProfiles(previous, tradeDate) {
+  const predictionById = new Map((previous.runs ?? []).flatMap((run) => run.predictions.map((item) => [item.id, item])));
+  const matured = (previous.tracking ?? []).filter((item) => item.status === "matured" && item.exitCloseDate < tradeDate)
+    .flatMap((item) => { const prediction = predictionById.get(item.predictionId); return prediction?.modelVersion === FORECAST_MODEL_VERSION ? [{ prediction, tracking: item }] : []; });
+  return Object.fromEntries(FORECAST_HORIZONS.map((horizon) => {
+    const samples = matured.filter((item) => item.prediction.horizonId === horizon.id);
+    const overallWinRate = samples.length ? samples.filter((item) => item.tracking.outcome === "win").length / samples.length : 0;
+    const adjustments = Object.fromEntries(VECTOR_DIMENSIONS.map(({ id }) => {
+      const high = samples.filter((item) => item.prediction.vector[id] >= 70);
+      const highWinRate = high.length ? high.filter((item) => item.tracking.outcome === "win").length / high.length : overallWinRate;
+      const adjustment = samples.length >= 20 && high.length >= 5 ? clamp((highWinRate - overallWinRate) * .08, -.03, .03) : 0;
+      return [id, adjustment];
+    }));
+    const rawWeights = Object.fromEntries(Object.entries(horizon.weights).map(([id, weight]) => [id, weight * (1 + adjustments[id])]));
+    const totalWeight = Object.values(rawWeights).reduce((sum, value) => sum + value, 0);
+    const effectiveWeights = Object.fromEntries(Object.entries(rawWeights).map(([id, weight]) => [id, weight / totalWeight]));
+    return [horizon.id, {
+      sampleSize: samples.length, overallWinRate, adjustments, effectiveWeights,
+      status: samples.length >= 20 ? "calibrated" : "warming-up",
+      note: samples.length >= 20 ? `使用 ${samples.length} 个已到期历史样本做上限 3% 的温和校准。` : `仅有 ${samples.length} 个已到期样本，未达到 20 个门槛，沿用基础权重。`,
+    }];
+  }));
+}
+
+function newsEvidence(stock, news) {
+  const direct = news.filter((item) => item.title.includes(stock.name) || item.title.includes(stock.code)).slice(0, 3);
+  const market = news.slice(0, 3);
+  return {
+    direct: direct.map((item) => ({ title: item.title, source: item.source, category: item.category })),
+    market: market.map((item) => ({ title: item.title, source: item.source, category: item.category })),
+    summary: direct.length
+      ? `当日标题级检索发现 ${direct.length} 条直接关联资讯，作为辅助证据而非单独买入理由。`
+      : "当日聚合资讯未发现标题级直接关联；只采用市场级新闻作为情境，不推断个股利好。",
+  };
+}
+
+function selectionAnalysis(stock, vector, weights, horizon, news, experience) {
+  const contributions = VECTOR_DIMENSIONS.map(({ id, label }) => ({
+    id, label, score: Math.round(vector[id]), weight: weights[id], contribution: vector[id] * weights[id],
+  })).sort((a, b) => b.contribution - a.contribution);
+  const strongest = contributions.slice(0, 2).map((item) => item.label).join("与");
+  return {
+    thesis: `${horizon.label}周期更看重${horizon.sessions <= 10 ? "价格动能和交易参与" : horizon.sessions >= 120 ? "估值、流动性和稳定性" : "动能与基本约束的平衡"}；该股的主要贡献来自${strongest}。`,
+    contributions: contributions.map((item) => ({ ...item, weight: Number(item.weight.toFixed(4)), contribution: Number(item.contribution.toFixed(2)) })),
+    news: newsEvidence(stock, news), experience: { sampleSize: experience.sampleSize, status: experience.status, note: experience.note },
+  };
+}
+
+function forecastRisks(stock, amplitude) {
+  const risks = [];
+  if (stock.change > 6) risks.push("当日涨幅偏高，存在回撤风险");
+  if (stock.volumeRatio > 3.5) risks.push("量能短时放大，持续性待验证");
+  if (stock.pe > 60) risks.push("估值偏高，对预期变化敏感");
+  if (amplitude > 7) risks.push("日内振幅较大");
+  if (stock.marketCap < 1e10) risks.push("中小市值波动与流动性风险较高");
+  if (!risks.length) risks.push("单日截面不能替代连续行情与基本面研究");
+  return risks.slice(0, 2);
+}
+
+function chooseHorizonStocks(stocks, market, horizon, news, experience) {
+  const eligible = stocks.filter((stock) => !/^(N|C|\*?ST|退)/i.test(stock.name)
+    && stock.price >= 3 && stock.change > -2 && stock.change < 9.6 && stock.turnoverRate > .3 && stock.turnoverRate < 22
+    && stock.volumeRatio >= .6 && stock.volumeRatio < 6 && stock.pe > 0 && stock.pe < 120 && stock.marketCap > 3e9 && stock.turnover > 8e7);
+  const context = marketContextScore(market);
+  const weights = experience.effectiveWeights;
+  return eligible.map((stock) => {
+    const { vector, amplitude } = stockVector(stock, context);
+    const weightedScore = Object.entries(weights).reduce((sum, [key, weight]) => sum + vector[key] * weight, 0);
+    const horizonPenalty = horizon.sessions <= 10 ? Math.max(0, 1 - stock.change) * 2.5 : Math.max(0, stock.change - 7) * .9;
+    return { stock, vector, amplitude, score: clamp(weightedScore - horizonPenalty, 0, 99) };
+  }).sort((a, b) => b.score - a.score || b.stock.turnover - a.stock.turnover).slice(0, 5).map((candidate, index) => {
+    const { stock, vector, amplitude, score } = candidate;
+    return {
+      id: `${market.tradeDate}:${FORECAST_MODEL_VERSION}:${horizon.id}:${stock.secid}`, horizonId: horizon.id, rank: index + 1,
+      secid: stock.secid, code: stock.code, name: stock.name, score: Math.round(score), entryPrice: stock.price,
+      entryCloseDate: market.tradeDate, entryBasis: "当日收盘观察价", modelVersion: FORECAST_MODEL_VERSION,
+      vector: Object.fromEntries(Object.entries(vector).map(([key, value]) => [key, Math.round(value)])),
+      featureSnapshot: {
+        change: stock.change, turnoverRate: stock.turnoverRate, volumeRatio: stock.volumeRatio, pe: stock.pe,
+        marketCap: stock.marketCap, turnover: stock.turnover, amplitude: Number(amplitude.toFixed(4)),
+      },
+      effectiveWeights: Object.fromEntries(Object.entries(weights).map(([key, value]) => [key, Number(value.toFixed(4))])),
+      reasons: forecastReasons(stock, vector, weights), risks: forecastRisks(stock, amplitude),
+      analysis: selectionAnalysis(stock, vector, weights, horizon, news, experience),
+    };
+  });
+}
+
+function buildDailyContextReview(market, sectors, news) {
+  const sortedIndices = [...market.indices].sort((a, b) => b.change - a.change);
+  const sortedSectors = [...sectors].sort((a, b) => b.change - a.change);
+  const positivePattern = /增长|利好|增持|回购|上涨|突破|获批|中标|扭亏|超预期|创新高/;
+  const negativePattern = /下跌|风险|减持|亏损|处罚|调查|退市|暴跌|违约|终止|不及预期/;
+  const positiveNews = news.filter((item) => positivePattern.test(item.title)).length;
+  const negativeNews = news.filter((item) => negativePattern.test(item.title)).length;
+  const categories = [...new Set(news.map((item) => item.category))].map((categoryName) => ({ category: categoryName, count: news.filter((item) => item.category === categoryName).length })).sort((a, b) => b.count - a.count);
+  return {
+    market: {
+      averageIndexChange: average(market.indices.map((item) => item.change)),
+      positiveIndices: market.indices.filter((item) => item.change > 0).length,
+      totalIndices: market.indices.length,
+      leadingIndex: sortedIndices[0] ? { name: sortedIndices[0].name, change: sortedIndices[0].change } : null,
+      laggingIndex: sortedIndices.at(-1) ? { name: sortedIndices.at(-1).name, change: sortedIndices.at(-1).change } : null,
+      leadingSectors: sortedSectors.slice(0, 3).map((item) => ({ name: item.name, change: item.change })),
+    },
+    news: {
+      count: news.length, positiveSignals: positiveNews, negativeSignals: negativeNews, categories,
+      headlines: news.slice(0, 5).map((item) => ({ title: item.title, source: item.source, category: item.category, heat: item.heat })),
+      note: "新闻情绪仅按标题关键词做辅助归类，不等同于事件利好或利空判断。",
+    },
+  };
+}
+
+function buildForecastData(previous, stocks, market, sectors, news, generatedAt, dataStatus, canCreateRun) {
+  const old = previous?.contentVersion === 1 ? previous : {};
+  const tradingDates = [...new Set([...(old.tradingDates ?? []), ...(canCreateRun ? [market.tradeDate] : [])])].sort().slice(-420);
+  let runs = Array.isArray(old.runs) ? old.runs : [];
+  const hasToday = runs.some((run) => run.asOfTradeDate === market.tradeDate && run.modelVersion === FORECAST_MODEL_VERSION);
+  const previousTodayReport = (old.reports ?? []).find((item) => item.tradeDate === market.tradeDate);
+  let newPredictionCount = previousTodayReport?.newPredictionCount ?? 0;
+  const experienceProfiles = buildExperienceProfiles(old, market.tradeDate);
+  if (canCreateRun && !hasToday) {
+    const predictions = FORECAST_HORIZONS.flatMap((horizon) => chooseHorizonStocks(stocks, market, horizon, news, experienceProfiles[horizon.id]));
+    newPredictionCount = predictions.length;
+    runs = [{ runId: `${market.tradeDate}:${FORECAST_MODEL_VERSION}`, asOfTradeDate: market.tradeDate, generatedAt, modelVersion: FORECAST_MODEL_VERSION, sourceStatus: dataStatus.status, experienceProfiles, predictions }, ...runs];
+  }
+  runs = runs.slice(0, 420);
+  const previousTracking = new Map((old.tracking ?? []).map((item) => [item.predictionId, item]));
+  const priceBySecid = new Map(stocks.map((stock) => [stock.secid, stock.price]));
+  const horizonById = new Map(FORECAST_HORIZONS.map((item) => [item.id, item]));
+  const dateIndex = new Map(tradingDates.map((date, index) => [date, index]));
+  const tracking = runs.flatMap((run) => run.predictions.map((prediction) => {
+    const prior = previousTracking.get(prediction.id);
+    if (prior?.status === "matured") return prior;
+    const currentPrice = priceBySecid.get(prediction.secid);
+    const elapsedSessions = Math.max(0, (dateIndex.get(market.tradeDate) ?? 0) - (dateIndex.get(prediction.entryCloseDate) ?? 0));
+    if (!currentPrice) return { predictionId: prediction.id, horizonId: prediction.horizonId, status: "missing-price", elapsedSessions, lastDate: market.tradeDate };
+    const returnPct = (currentPrice / prediction.entryPrice - 1) * 100;
+    const horizon = horizonById.get(prediction.horizonId);
+    if (elapsedSessions >= horizon.sessions) return {
+      predictionId: prediction.id, horizonId: prediction.horizonId, status: "matured", elapsedSessions,
+      lastDate: market.tradeDate, lastPrice: currentPrice, returnPct, exitCloseDate: market.tradeDate,
+      exitPrice: currentPrice, outcome: returnPct > 0 ? "win" : returnPct < 0 ? "loss" : "flat",
+    };
+    return { predictionId: prediction.id, horizonId: prediction.horizonId, status: "active", elapsedSessions, lastDate: market.tradeDate, lastPrice: currentPrice, returnPct };
+  }));
+  const predictionById = new Map(runs.flatMap((run) => run.predictions.map((item) => [item.id, item])));
+  const modelTracking = tracking.filter((item) => predictionById.get(item.predictionId)?.modelVersion === FORECAST_MODEL_VERSION);
+  const byHorizon = FORECAST_HORIZONS.map((horizon) => {
+    const items = modelTracking.filter((item) => item.horizonId === horizon.id);
+    const active = items.filter((item) => item.status === "active");
+    const matured = items.filter((item) => item.status === "matured");
+    const maturedToday = matured.filter((item) => item.exitCloseDate === market.tradeDate);
+    const currentRun = runs.find((run) => run.asOfTradeDate === market.tradeDate && run.modelVersion === FORECAST_MODEL_VERSION);
+    const todayPredictions = (currentRun?.predictions ?? []).filter((item) => item.horizonId === horizon.id);
+    return {
+      horizonId: horizon.id, active: active.length, positiveActive: active.filter((item) => item.returnPct > 0).length,
+      averageFloatingReturnPct: average(active.map((item) => item.returnPct)), maturedToday: maturedToday.length,
+      matured: matured.length, wins: matured.filter((item) => item.outcome === "win").length,
+      winRate: matured.length ? matured.filter((item) => item.outcome === "win").length / matured.length : 0,
+      averageRealizedReturnPct: average(matured.map((item) => item.returnPct)),
+      vectorAverages: Object.fromEntries(VECTOR_DIMENSIONS.map(({ id }) => [id, average(todayPredictions.map((item) => item.vector[id]))])),
+    };
+  });
+  const active = modelTracking.filter((item) => item.status === "active");
+  const matured = modelTracking.filter((item) => item.status === "matured");
+  const maturedToday = matured.filter((item) => item.exitCloseDate === market.tradeDate);
+  const bestActive = [...byHorizon].filter((item) => item.active).sort((a, b) => b.averageFloatingReturnPct - a.averageFloatingReturnPct)[0];
+  const narrative = [
+    newPredictionCount ? `本交易日按六个持有周期记录 ${newPredictionCount} 个前向观察样本，每个周期 5 只。` : "本交易日未创建新预测，继续追踪既有样本。",
+    active.length ? `当前 ${active.length} 个样本处于观察期，${active.filter((item) => item.returnPct > 0).length} 个暂为正收益，平均浮动 ${average(active.map((item) => item.returnPct)).toFixed(2)}%。` : "当前暂无处于观察期的历史样本。",
+    maturedToday.length ? `今日到期 ${maturedToday.length} 个，正收益 ${maturedToday.filter((item) => item.outcome === "win").length} 个，平均收益 ${average(maturedToday.map((item) => item.returnPct)).toFixed(2)}%。` : "今日暂无到期样本；真实胜率需等待对应交易日周期结束后形成。",
+    bestActive ? `当前浮动表现相对较好的周期为${horizonById.get(bestActive.horizonId).label}，平均 ${bestActive.averageFloatingReturnPct.toFixed(2)}%；该数值尚未到期，不代表最终结果。` : "模型仍处于前向积累阶段，不使用未来数据回填历史结论。",
+  ];
+  if (!canCreateRun) narrative.push("本次核心行情使用缓存，已暂停新增样本，避免污染验证日志。");
+  const contextReview = buildDailyContextReview(market, sectors, news);
+  const calibratedHorizons = Object.values(experienceProfiles).filter((item) => item.status === "calibrated").length;
+  const reflection = {
+    market: `指数平均 ${contextReview.market.averageIndexChange.toFixed(2)}%，${contextReview.market.positiveIndices}/${contextReview.market.totalIndices} 个核心指数上涨；领涨为${contextReview.market.leadingIndex?.name ?? "—"}。`,
+    news: `复核 ${contextReview.news.count} 条资讯，标题关键词中正向 ${contextReview.news.positiveSignals} 条、风险类 ${contextReview.news.negativeSignals} 条；仅作为市场情境。`,
+    model: maturedToday.length ? `今日新增 ${maturedToday.length} 个到期样本，结果已进入经验池，但从下一交易日才允许参与校准。` : "今日没有新增到期样本，模型不因在途浮盈或浮亏调整权重。",
+    next: calibratedHorizons ? `${calibratedHorizons} 个周期达到经验门槛，下一交易日继续采用有界校准权重。` : "各周期尚未积累至少 20 个到期样本，下一交易日继续使用基础权重，避免小样本过拟合。",
+  };
+  const report = {
+    tradeDate: market.tradeDate, generatedAt, sourceStatus: dataStatus.status, newPredictionCount,
+    activeCount: active.length, maturedTodayCount: maturedToday.length,
+    missingPriceCount: tracking.filter((item) => item.status === "missing-price").length,
+    summary: {
+      positiveActiveRate: active.length ? active.filter((item) => item.returnPct > 0).length / active.length : 0,
+      averageFloatingReturnPct: average(active.map((item) => item.returnPct)),
+      cumulativeMatured: matured.length, cumulativeWinRate: matured.length ? matured.filter((item) => item.outcome === "win").length / matured.length : 0,
+      cumulativeAverageReturnPct: average(matured.map((item) => item.returnPct)), cumulativeMedianReturnPct: median(matured.map((item) => item.returnPct)),
+    },
+    byHorizon, narrative, contextReview, reflection,
+    experience: Object.fromEntries(FORECAST_HORIZONS.map((horizon) => [horizon.id, {
+      sampleSize: experienceProfiles[horizon.id].sampleSize, status: experienceProfiles[horizon.id].status,
+      adjustments: experienceProfiles[horizon.id].adjustments, note: experienceProfiles[horizon.id].note,
+    }])),
+  };
+  const reports = [report, ...(old.reports ?? []).filter((item) => item.tradeDate !== market.tradeDate)].slice(0, 420);
+  return {
+    contentVersion: 1, generatedAt, latestTradeDate: market.tradeDate,
+    model: {
+      version: FORECAST_MODEL_VERSION, label: "多周期向量评分 v2", dimensions: VECTOR_DIMENSIONS,
+      principle: "只使用预测生成时可见的收盘截面；到期样本从下一交易日起做有界经验校准；日志产生后不回改。",
+      limitation: "这是规则排序和前向验证，不是上涨保证；新闻仅做标题级情境分析，暂不包含连续历史、财报质量、公告全文和可成交价格。",
+    },
+    horizons: FORECAST_HORIZONS.map(({ weights, ...item }) => ({ ...item, weights })), tradingDates, runs, tracking, reports,
+    audit: { predictionCount: [...predictionById].length, retentionTradingDays: 420, entryBasis: "预测日收盘观察价", outcomeRule: "第 N 个后续有效收盘价相对观察价大于 0" },
+  };
+}
+
 async function readJson(path, fallback) {
   try { return JSON.parse(await readFile(path, "utf8")); } catch { return fallback; }
 }
@@ -346,14 +618,18 @@ async function main() {
   const historyPath = resolve(ROOT, "history.json");
   const history = await readJson(historyPath, []);
   const today = { date: daily.tradeDate, stocks: stocks.map((s) => [s.secid, s.price, s.change]) };
-  const nextHistory = [today, ...history.filter((x) => x.date !== daily.tradeDate)].slice(0, 60);
+  const nextHistory = [today, ...history.filter((x) => x.date !== daily.tradeDate)].slice(0, 260);
+  const forecastsPath = resolve(ROOT, "forecasts.json");
+  const previousForecasts = await readJson(forecastsPath, {});
+  const forecasts = buildForecastData(previousForecasts, stocks, market, sectors, news, generatedAt, dataStatus, essentialLive);
   await Promise.all([
     writeFile(resolve(ROOT, "daily.json"), `${JSON.stringify(daily)}\n`),
     writeFile(resolve(ROOT, "stocks.json"), `${JSON.stringify({ tradeDate: daily.tradeDate, generatedAt, items: stocks })}\n`),
     writeFile(archivePath, `${JSON.stringify(nextArchive)}\n`),
     writeFile(historyPath, `${JSON.stringify(nextHistory)}\n`),
+    writeFile(forecastsPath, `${JSON.stringify(forecasts)}\n`),
   ]);
-  console.log(`微光 Pages 数据已更新：${daily.tradeDate}，${stocks.length} 只股票，${news.length} 条资讯，${daily.recommendations.length} 种战法；指数 ${marketSource}，个股 ${stockSource}，板块 ${sectorSource}，资讯 ${dataStatus.newsSource}`);
+  console.log(`微光 Pages 数据已更新：${daily.tradeDate}，${stocks.length} 只股票，${news.length} 条资讯，${daily.recommendations.length} 种战法，${forecasts.runs[0]?.predictions.length ?? 0} 个周期预测；指数 ${marketSource}，个股 ${stockSource}，板块 ${sectorSource}，资讯 ${dataStatus.newsSource}`);
   if (dataStatus.status === "stale") {
     console.error(`::error title=行情更新失败::指数 ${marketSource}，个股 ${stockSource}；页面已保留最近缓存。`);
     process.exitCode = 2;
