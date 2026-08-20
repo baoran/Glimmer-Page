@@ -36,7 +36,9 @@ jobs:
         id: refresh
         if: github.event_name != 'push'
         continue-on-error: true
-        run: node scripts/update-pages-data.mjs
+        run: |
+          node scripts/update-pages-data.mjs
+          node scripts/validate-forecast-data.mjs
 
       - name: Commit the daily snapshot
         if: always() && github.event_name != 'push'
