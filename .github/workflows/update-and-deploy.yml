@@ -49,6 +49,9 @@ jobs:
           git diff --cached --quiet || git commit -m "data: daily refresh"
           git push
 
+      - name: Version static assets
+        run: node scripts/stamp-pages-assets.mjs "$GITHUB_SHA"
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
