@@ -456,7 +456,7 @@ def markdown(artifact: dict[str, Any]) -> str:
 
 ## 候选参数
 
-| Agent | v2 研究先验 | v3 历史候选 |
+| Agent | 历史优化基准 | v3 历史候选 |
 |---|---:|---:|
 {rows}
 
@@ -472,7 +472,7 @@ $$
 
 | 模型 | 样本 | 正收益率 | AUC | Brier | Log loss |
 |---|---:|---:|---:|---:|---:|
-| v2 研究先验 | {e['testResearchPrior']['samples']} | {e['testResearchPrior']['positiveRate']:.2%} | {e['testResearchPrior']['auc']:.3f} | {e['testResearchPrior']['brier']:.3f} | {e['testResearchPrior']['logLoss']:.3f} |
+| 历史优化基准 | {e['testResearchPrior']['samples']} | {e['testResearchPrior']['positiveRate']:.2%} | {e['testResearchPrior']['auc']:.3f} | {e['testResearchPrior']['brier']:.3f} | {e['testResearchPrior']['logLoss']:.3f} |
 | v3 历史候选 | {e['testCandidate']['samples']} | {e['testCandidate']['positiveRate']:.2%} | {e['testCandidate']['auc']:.3f} | {e['testCandidate']['brier']:.3f} | {e['testCandidate']['logLoss']:.3f} |
 
 - Brier 改善：{e['testBrierImprovement']:+.4f}（正数表示候选更好）。

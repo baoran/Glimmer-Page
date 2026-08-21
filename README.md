@@ -17,6 +17,6 @@
 - 运行 `node scripts/validate-forecast-data.mjs` 可检查六周期、每期五只、向量完整性、追踪引用以及 Swarm 非干预和审计一致性。
 - 运行 `node scripts/test-forecast-swarm.mjs` 可验证 v1 非干预、v2 shadow 隔离、低证据收缩、长周期降置信度以及数据/风险硬质疑。
 
-完整架构、仲裁口径、daily run 行为和页面使用方法见 [Agent Swarm 系统介绍与使用说明](docs/agent-swarm.md)。每个子 Agent 的定位、输入输出、实现公式、风险和优化方向见 [子 Agent 文档索引](docs/agents/README.md)；当前人工公式的来源、证据等级和科学升级流程见 [参数来源与证据等级](docs/agents/parameter-provenance.md)；论文依据和研究参数见 [Research-grounded Shadow Swarm v2](docs/agents/research-grounded-v2.md)；首轮时点化历史校准及其未通过原因见 [Historical Calibration v3 Candidate](docs/agents/historical-calibration-v3.md)。
+完整架构、仲裁口径、daily run 行为和页面使用方法见 [Agent Swarm 系统介绍与使用说明](docs/agent-swarm.md)。每个子 Agent 的定位、输入输出、实现公式、风险和优化方向见 [子 Agent 文档索引](docs/agents/README.md)；当前人工公式的来源、证据等级和科学升级流程见 [参数来源与证据等级](docs/agents/parameter-provenance.md)；论文依据和研究参数见 [Research-grounded Shadow Swarm v2](docs/agents/research-grounded-v2.md)；首轮时点化历史校准摘要见 [Historical Calibration v3 Candidate](docs/agents/historical-calibration-v3.md)，优化对象、方法、数据和结果的完整说明见 [Agent Swarm 历史参数优化报告](docs/agents/swarm-v3-optimization-report.md)。
 
 该模块是规则排序与前向观察实验，不构成收益承诺或投资建议。当前观察价使用预测日收盘价，并不代表次日真实可成交价格。
