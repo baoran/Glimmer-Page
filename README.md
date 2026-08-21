@@ -14,6 +14,6 @@
 - `node scripts/backfill-forecast-preview.mjs` 可生成前 10 个交易日的历史回放体验。回放使用真实未复权日线，但股票池取自当前高流动股票且历史估值缺失，因此与正式前向日志、胜率及经验池严格隔离。
 - 运行 `node scripts/validate-forecast-data.mjs` 可检查六周期、每期五只、向量完整性、追踪引用以及 Swarm 非干预和审计一致性。
 
-完整架构、仲裁口径、daily run 行为和页面使用方法见 [Agent Swarm 系统介绍与使用说明](docs/agent-swarm.md)。每个子 Agent 的定位、输入输出、实现公式、风险和优化方向见 [子 Agent 文档索引](docs/agents/README.md)。
+完整架构、仲裁口径、daily run 行为和页面使用方法见 [Agent Swarm 系统介绍与使用说明](docs/agent-swarm.md)。每个子 Agent 的定位、输入输出、实现公式、风险和优化方向见 [子 Agent 文档索引](docs/agents/README.md)；当前人工公式的来源、证据等级和科学升级流程见 [参数来源与证据等级](docs/agents/parameter-provenance.md)。
 
 该模块是规则排序与前向观察实验，不构成收益承诺或投资建议。当前观察价使用预测日收盘价，并不代表次日真实可成交价格。

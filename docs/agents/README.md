@@ -2,6 +2,8 @@
 
 本目录是七个子 Agent 的独立设计说明。实现采用“公共契约 + 六个专业 Agent + 仲裁 Agent + 编排器”，入口保持为 `scripts/lib/forecast-swarm.mjs`。
 
+> **参数来源声明：**当前公式、权重、阈值和置信度属于 E1 人工工程先验，不来自论文、行业标准或历史拟合，也未达到样本外验证等级。逐项来源、当前分布问题和科学升级流程见 [参数来源与证据等级](parameter-provenance.md)。
+
 ## 实现地图
 
 | Agent | 实现 | 文档 | 当前作用 |
@@ -13,6 +15,8 @@
 | 新闻 Agent | `scripts/lib/forecast-swarm/agents/news-agent.mjs` | [news-agent.md](news-agent.md) | 标题级直接证据核验 |
 | 风险 Agent | `scripts/lib/forecast-swarm/agents/risk-agent.mjs` | [risk-agent.md](risk-agent.md) | 主动寻找反证并计算安全余量 |
 | 仲裁 Agent | `scripts/lib/forecast-swarm/agents/arbitration-agent.mjs` | [arbitration-agent.md](arbitration-agent.md) | 汇总共识与分歧，不干预正式排名 |
+
+参数治理文档：[参数来源与证据等级](parameter-provenance.md)。
 
 其他模块：
 

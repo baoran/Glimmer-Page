@@ -2,6 +2,13 @@ export const SWARM_VERSION = "forecast-supervision-swarm-v1";
 export const SWARM_SCHEMA_VERSION = 1;
 export const SWARM_POLICY = "只读监督层：复核正式六维 Vector，不修改候选、分数、排名或历史日志。";
 export const AGENT_VERSION = "deterministic-rule-v1";
+export const PARAMETER_EVIDENCE = {
+  level: "E1",
+  label: "人工工程先验",
+  validated: false,
+  statement: "公式、权重、阈值和置信度用于建立可审计基线，不来自论文、行业标准或历史拟合，尚未通过充分样本外验证。",
+  documentation: "docs/agents/parameter-provenance.md",
+};
 
 export const SWARM_AGENT_DEFINITIONS = [
   { id: "data", label: "数据 Agent", responsibility: "检查行情字段、来源状态和输入完整性" },

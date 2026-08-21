@@ -8,6 +8,7 @@ const fail = (message) => { throw new Error(`预测数据校验失败：${messag
 if (data.contentVersion !== 1) fail("contentVersion 必须为 1");
 if (!data.model?.version || !Array.isArray(data.model.dimensions) || data.model.dimensions.length < 5) fail("模型或向量定义缺失");
 if (!data.model?.swarm?.version || data.model.swarm.nonInterference !== true || data.model.swarm.agents?.length !== 7) fail("Agent Swarm 模型定义缺失");
+if (data.model.swarm.parameterEvidence?.level !== "E1" || data.model.swarm.parameterEvidence.validated !== false) fail("Swarm 参数来源或验证状态缺失");
 if (!Array.isArray(data.horizons) || data.horizons.length !== 6) fail("必须配置六个预测周期");
 if (!Array.isArray(data.runs) || !data.runs.length) fail("预测日志为空");
 if (!Array.isArray(data.tracking) || !Array.isArray(data.reports) || !data.reports.length) fail("追踪或日报为空");

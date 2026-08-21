@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { buildSwarmReflection, buildSwarmReview, buildSwarmSummary, SWARM_AGENT_DEFINITIONS, SWARM_POLICY, SWARM_SCHEMA_VERSION, SWARM_VERSION } from "./lib/forecast-swarm.mjs";
+import { buildSwarmReflection, buildSwarmReview, buildSwarmSummary, PARAMETER_EVIDENCE, SWARM_AGENT_DEFINITIONS, SWARM_POLICY, SWARM_SCHEMA_VERSION, SWARM_VERSION } from "./lib/forecast-swarm.mjs";
 
 const ROOT = resolve(process.cwd(), "site", "data");
 const EAST_LIST = "https://82.push2.eastmoney.com/api/qt/clist/get";
@@ -561,7 +561,7 @@ function buildForecastData(previous, stocks, market, sectors, news, generatedAt,
       limitation: "这是规则排序和前向验证，不是上涨保证；新闻仅做标题级情境分析，暂不包含连续历史、财报质量、公告全文和可成交价格。",
       swarm: {
         version: SWARM_VERSION, schemaVersion: SWARM_SCHEMA_VERSION, policy: SWARM_POLICY,
-        nonInterference: true, agents: SWARM_AGENT_DEFINITIONS,
+        nonInterference: true, parameterEvidence: PARAMETER_EVIDENCE, agents: SWARM_AGENT_DEFINITIONS,
       },
     },
     horizons: FORECAST_HORIZONS.map(({ weights, ...item }) => ({ ...item, weights })), tradingDates, runs, tracking, reports,
