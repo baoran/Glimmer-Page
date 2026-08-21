@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { buildSwarmReflection, buildSwarmReview, buildSwarmSummary, SWARM_AGENT_DEFINITIONS, SWARM_POLICY, SWARM_SCHEMA_VERSION, SWARM_VERSION } from "./lib/forecast-swarm.mjs";
 
 const ROOT = resolve(process.cwd(), "site", "data");
 const EAST_LIST = "https://82.push2.eastmoney.com/api/qt/clist/get";
@@ -399,7 +400,7 @@ function forecastRisks(stock, amplitude) {
   return risks.slice(0, 2);
 }
 
-function chooseHorizonStocks(stocks, market, horizon, news, experience) {
+function chooseHorizonStocks(stocks, market, horizon, news, experience, dataStatus, generatedAt) {
   const eligible = stocks.filter((stock) => !/^(N|C|\*?ST|退)/i.test(stock.name)
     && stock.price >= 3 && stock.change > -2 && stock.change < 9.6 && stock.turnoverRate > .3 && stock.turnoverRate < 22
     && stock.volumeRatio >= .6 && stock.volumeRatio < 6 && stock.pe > 0 && stock.pe < 120 && stock.marketCap > 3e9 && stock.turnover > 8e7);
@@ -412,9 +413,10 @@ function chooseHorizonStocks(stocks, market, horizon, news, experience) {
     return { stock, vector, amplitude, score: clamp(weightedScore - horizonPenalty, 0, 99) };
   }).sort((a, b) => b.score - a.score || b.stock.turnover - a.stock.turnover).slice(0, 5).map((candidate, index) => {
     const { stock, vector, amplitude, score } = candidate;
-    return {
+    const formalScore = Math.round(score);
+    const prediction = {
       id: `${market.tradeDate}:${FORECAST_MODEL_VERSION}:${horizon.id}:${stock.secid}`, horizonId: horizon.id, rank: index + 1,
-      secid: stock.secid, code: stock.code, name: stock.name, score: Math.round(score), entryPrice: stock.price,
+      secid: stock.secid, code: stock.code, name: stock.name, score: formalScore, entryPrice: stock.price,
       entryCloseDate: market.tradeDate, entryBasis: "当日收盘观察价", modelVersion: FORECAST_MODEL_VERSION,
       vector: Object.fromEntries(Object.entries(vector).map(([key, value]) => [key, Math.round(value)])),
       featureSnapshot: {
@@ -425,6 +427,11 @@ function chooseHorizonStocks(stocks, market, horizon, news, experience) {
       reasons: forecastReasons(stock, vector, weights), risks: forecastRisks(stock, amplitude),
       analysis: selectionAnalysis(stock, vector, weights, horizon, news, experience),
     };
+    prediction.swarmReview = buildSwarmReview({
+      stock, vector, amplitude, market, news, sourceStatus: dataStatus.status,
+      formalScore, horizon, generatedAt, trainingEligible: true,
+    });
+    return prediction;
   });
 }
 
@@ -462,9 +469,13 @@ function buildForecastData(previous, stocks, market, sectors, news, generatedAt,
   let newPredictionCount = previousTodayReport?.newPredictionCount ?? 0;
   const experienceProfiles = buildExperienceProfiles(old, market.tradeDate);
   if (canCreateRun && !hasToday) {
-    const predictions = FORECAST_HORIZONS.flatMap((horizon) => chooseHorizonStocks(stocks, market, horizon, news, experienceProfiles[horizon.id]));
+    const predictions = FORECAST_HORIZONS.flatMap((horizon) => chooseHorizonStocks(stocks, market, horizon, news, experienceProfiles[horizon.id], dataStatus, generatedAt));
     newPredictionCount = predictions.length;
-    runs = [{ runId: `${market.tradeDate}:${FORECAST_MODEL_VERSION}`, asOfTradeDate: market.tradeDate, generatedAt, modelVersion: FORECAST_MODEL_VERSION, sourceStatus: dataStatus.status, experienceProfiles, predictions }, ...runs];
+    runs = [{
+      runId: `${market.tradeDate}:${FORECAST_MODEL_VERSION}`, asOfTradeDate: market.tradeDate, generatedAt,
+      modelVersion: FORECAST_MODEL_VERSION, sourceStatus: dataStatus.status, experienceProfiles,
+      swarmVersion: SWARM_VERSION, swarmSummary: buildSwarmSummary(predictions), predictions,
+    }, ...runs];
   }
   runs = runs.slice(0, 420);
   const previousTracking = new Map((old.tracking ?? []).map((item) => [item.predictionId, item]));
@@ -523,6 +534,8 @@ function buildForecastData(previous, stocks, market, sectors, news, generatedAt,
     model: maturedToday.length ? `今日新增 ${maturedToday.length} 个到期样本，结果已进入经验池，但从下一交易日才允许参与校准。` : "今日没有新增到期样本，模型不因在途浮盈或浮亏调整权重。",
     next: calibratedHorizons ? `${calibratedHorizons} 个周期达到经验门槛，下一交易日继续采用有界校准权重。` : "各周期尚未积累至少 20 个到期样本，下一交易日继续使用基础权重，避免小样本过拟合。",
   };
+  const currentRun = runs.find((run) => run.asOfTradeDate === market.tradeDate && run.modelVersion === FORECAST_MODEL_VERSION);
+  const swarmReflection = buildSwarmReflection(currentRun?.swarmSummary);
   const report = {
     tradeDate: market.tradeDate, generatedAt, sourceStatus: dataStatus.status, newPredictionCount,
     activeCount: active.length, maturedTodayCount: maturedToday.length,
@@ -533,7 +546,7 @@ function buildForecastData(previous, stocks, market, sectors, news, generatedAt,
       cumulativeMatured: matured.length, cumulativeWinRate: matured.length ? matured.filter((item) => item.outcome === "win").length / matured.length : 0,
       cumulativeAverageReturnPct: average(matured.map((item) => item.returnPct)), cumulativeMedianReturnPct: median(matured.map((item) => item.returnPct)),
     },
-    byHorizon, narrative, contextReview, reflection,
+    byHorizon, narrative, contextReview, reflection, swarmReflection,
     experience: Object.fromEntries(FORECAST_HORIZONS.map((horizon) => [horizon.id, {
       sampleSize: experienceProfiles[horizon.id].sampleSize, status: experienceProfiles[horizon.id].status,
       adjustments: experienceProfiles[horizon.id].adjustments, note: experienceProfiles[horizon.id].note,
@@ -546,9 +559,17 @@ function buildForecastData(previous, stocks, market, sectors, news, generatedAt,
       version: FORECAST_MODEL_VERSION, label: "多周期向量评分 v2", dimensions: VECTOR_DIMENSIONS,
       principle: "只使用预测生成时可见的收盘截面；到期样本从下一交易日起做有界经验校准；日志产生后不回改。",
       limitation: "这是规则排序和前向验证，不是上涨保证；新闻仅做标题级情境分析，暂不包含连续历史、财报质量、公告全文和可成交价格。",
+      swarm: {
+        version: SWARM_VERSION, schemaVersion: SWARM_SCHEMA_VERSION, policy: SWARM_POLICY,
+        nonInterference: true, agents: SWARM_AGENT_DEFINITIONS,
+      },
     },
     horizons: FORECAST_HORIZONS.map(({ weights, ...item }) => ({ ...item, weights })), tradingDates, runs, tracking, reports,
-    audit: { predictionCount: [...predictionById].length, retentionTradingDays: 420, entryBasis: "预测日收盘观察价", outcomeRule: "第 N 个后续有效收盘价相对观察价大于 0" },
+    audit: {
+      predictionCount: [...predictionById].length, retentionTradingDays: 420, entryBasis: "预测日收盘观察价",
+      outcomeRule: "第 N 个后续有效收盘价相对观察价大于 0", swarmSchemaVersion: SWARM_SCHEMA_VERSION,
+      swarmReviewedPredictionCount: [...predictionById.values()].filter((item) => item.swarmReview).length,
+    },
   };
 }
 

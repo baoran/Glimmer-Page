@@ -556,6 +556,47 @@ tbody tr:hover { background: var(--red-wash); }
 .vector-legend b { display: block; margin-bottom: 4px; color: var(--ink); font-size: 11px; }
 .method-limit { grid-column: 1 / -1; margin: 0; padding-top: 15px; color: var(--muted); border-top: 1px solid var(--line); font-size: 10px; line-height: 1.65; }
 .method-limit b { color: var(--red); }
+.swarm-system { margin-top: 14px; overflow: hidden; background: var(--paper-raised); border: 1px solid var(--line); border-radius: 10px; }
+.swarm-head { min-height: 112px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 20px 22px; border-bottom: 1px solid var(--line); }
+.swarm-head p { margin: 0 0 7px; color: var(--red); font: 700 9px Geist, sans-serif; letter-spacing: .16em; }
+.swarm-head h2 { margin: 0; font-size: 22px; letter-spacing: -.035em; }
+.swarm-head small { display: block; max-width: 680px; margin-top: 8px; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.swarm-day-summary { display: grid; grid-template-columns: repeat(3, minmax(92px, 1fr)); gap: 6px; min-width: min(440px, 48%); }
+.swarm-day-summary span { padding: 10px; color: var(--muted); background: color-mix(in srgb, var(--canvas) 55%, transparent); border: 1px solid var(--line); border-radius: 7px; font-size: 8px; }
+.swarm-day-summary b { display: block; margin-top: 7px; color: var(--ink); font: 680 13px Geist, sans-serif; }
+.swarm-role-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+.swarm-role-grid article { min-height: 88px; display: flex; gap: 11px; padding: 15px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.swarm-role-grid article:nth-child(4n) { border-right: 0; }
+.swarm-role-grid article:nth-child(n + 5) { border-bottom: 0; }
+.swarm-role-grid > article > span { color: var(--red); font: 700 9px Geist, sans-serif; }
+.swarm-role-grid b { display: block; color: var(--ink); font-size: 10px; }
+.swarm-role-grid p { margin: 6px 0 0; color: var(--muted); font-size: 9px; line-height: 1.55; }
+.swarm-guide { display: flex; gap: 18px; padding: 14px 19px; color: var(--muted); background: color-mix(in srgb, var(--red-soft) 32%, transparent); font-size: 9px; line-height: 1.65; }
+.swarm-guide > b { flex: 0 0 auto; color: var(--red); }
+.swarm-guide p { margin: 0; }
+.swarm-guide strong { color: var(--ink-soft); }
+.swarm-review { margin-top: 11px; border: 1px solid var(--line); border-radius: 7px; }
+.swarm-review summary { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px; padding: 9px 10px; cursor: pointer; list-style: none; }
+.swarm-review summary::-webkit-details-marker { display: none; }
+.swarm-review summary > span { color: var(--red); font: 700 8px Geist, sans-serif; letter-spacing: .12em; }
+.swarm-review summary > b { padding: 3px 6px; border-radius: 4px; font-size: 8px; }
+.swarm-review summary > em { color: var(--muted); font: 8px Geist, sans-serif; font-style: normal; }
+.swarm-review .support { color: var(--red); background: var(--red-soft); }
+.swarm-review .neutral { color: #9a6a21; background: color-mix(in srgb, #d89935 14%, transparent); }
+.swarm-review .challenge { color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
+.swarm-agent-grid { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid var(--line); }
+.swarm-agent { min-height: 104px; padding: 10px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.swarm-agent:nth-child(even) { border-right: 0; }
+.swarm-agent > div { display: flex; align-items: center; justify-content: space-between; gap: 7px; }
+.swarm-agent > div b { color: var(--ink); font-size: 9px; }
+.swarm-agent > div span, .swarm-agent > small { color: var(--muted); font-size: 8px; }
+.swarm-agent > small { display: block; margin-top: 4px; }
+.swarm-agent p { margin: 9px 0 0; color: var(--ink-soft); font-size: 8px; line-height: 1.5; }
+.swarm-agent > em { display: block; margin-top: 5px; color: var(--muted); font-size: 7px; font-style: normal; line-height: 1.45; }
+.swarm-audit { display: flex; flex-wrap: wrap; gap: 7px 14px; padding: 10px; color: var(--muted); font-size: 7px; }
+.swarm-audit b { color: var(--ink-soft); font-family: Geist, monospace; }
+.swarm-audit p { width: 100%; margin: 0; line-height: 1.5; }
+.swarm-unavailable { margin-top: 11px; padding: 9px 10px; color: var(--muted); background: color-mix(in srgb, var(--canvas) 55%, transparent); border: 1px dashed var(--line); border-radius: 7px; font-size: 8px; line-height: 1.5; }
 .forecast-report { margin-top: 14px; overflow: hidden; background: var(--paper-raised); border: 1px solid var(--line); border-radius: 10px; }
 .report-head { min-height: 85px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 20px; border-bottom: 1px solid var(--line); }
 .report-head > span { color: var(--muted); font-size: 10px; }
@@ -564,6 +605,11 @@ tbody tr:hover { background: var(--red-wash); }
 .reflection-grid article:last-child { border-right: 0; }
 .reflection-grid span { color: var(--red); font-size: 10px; font-weight: 750; }
 .reflection-grid p { margin: 12px 0 0; color: var(--muted); font-size: 10px; line-height: 1.7; }
+.swarm-reflection { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--line); }
+.swarm-reflection > div { min-height: 82px; padding: 15px 18px; border-right: 1px solid var(--line); }
+.swarm-reflection > div:last-child { border-right: 0; }
+.swarm-reflection b { color: var(--red); font-size: 10px; }
+.swarm-reflection p { margin: 9px 0 0; color: var(--muted); font-size: 9px; line-height: 1.6; }
 .context-review { display: grid; grid-template-columns: .8fr 1.2fr; border-bottom: 1px solid var(--line); }
 .context-review > div { padding: 17px 19px; border-right: 1px solid var(--line); }
 .context-review > div:last-child { border-right: 0; }
@@ -878,7 +924,7 @@ body {
   -webkit-backdrop-filter: blur(34px) saturate(1.3);
   backdrop-filter: blur(34px) saturate(1.3);
 }
-:where(.overview-hero, .summary article, .index, .sector, .page-heading, .news-controls, .news-head, .news-list, .stock-tools, .table-wrap, .pagination, .history-panel, .disclaimer, .idea, .forecast-summary article, .forecast-journal, .backtest-preview, .forecast-controls, .forecast-panel, .vector-method, .forecast-report) {
+:where(.overview-hero, .summary article, .index, .sector, .page-heading, .news-controls, .news-head, .news-list, .stock-tools, .table-wrap, .pagination, .history-panel, .disclaimer, .idea, .forecast-summary article, .forecast-journal, .backtest-preview, .forecast-controls, .forecast-panel, .vector-method, .swarm-system, .forecast-report) {
   background: var(--glass-sheen), var(--glass-panel);
   border-color: var(--glass-stroke);
   box-shadow: var(--glass-shadow);
@@ -952,7 +998,7 @@ tbody tr:hover, .news-item:hover {
 .sector.lag .sector-meter i { background: linear-gradient(90deg, color-mix(in srgb, var(--green) 35%, transparent), var(--green)); }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .topbar,
-  :where(.overview-hero, .summary article, .index, .sector, .page-heading, .news-controls, .news-head, .news-list, .stock-tools, .table-wrap, .pagination, .history-panel, .disclaimer, .idea, .forecast-summary article, .forecast-journal, .backtest-preview, .forecast-controls, .forecast-panel, .vector-method, .forecast-report) {
+  :where(.overview-hero, .summary article, .index, .sector, .page-heading, .news-controls, .news-head, .news-list, .stock-tools, .table-wrap, .pagination, .history-panel, .disclaimer, .idea, .forecast-summary article, .forecast-journal, .backtest-preview, .forecast-controls, .forecast-panel, .vector-method, .swarm-system, .forecast-report) {
     background: var(--paper-raised);
   }
 }
@@ -1000,6 +1046,13 @@ footer { margin-top: 66px; }
   .forecast-summary { grid-template-columns: 1fr 1fr; }
   .horizon-tabs { grid-template-columns: repeat(3, 1fr); }
   .vector-method { grid-template-columns: 1fr; }
+  .swarm-head { align-items: flex-start; flex-direction: column; }
+  .swarm-day-summary { width: 100%; min-width: 0; }
+  .swarm-role-grid { grid-template-columns: repeat(2, 1fr); }
+  .swarm-role-grid article:nth-child(4n) { border-right: 1px solid var(--line); }
+  .swarm-role-grid article:nth-child(even) { border-right: 0; }
+  .swarm-role-grid article:nth-child(n + 5) { border-bottom: 1px solid var(--line); }
+  .swarm-role-grid article:nth-child(n + 7) { border-bottom: 0; }
   .method-limit { grid-column: auto; }
   .reflection-grid { grid-template-columns: 1fr 1fr; }
   .reflection-grid article:nth-child(2) { border-right: 0; }
@@ -1059,6 +1112,14 @@ footer { margin-top: 66px; }
   .vector-bars, .forecast-logic { grid-column: 2 / -1; border-top: 1px solid var(--line); }
   .forecast-rank span { font-size: 8px; }
   .vector-legend { grid-template-columns: 1fr 1fr; }
+  .swarm-day-summary { grid-template-columns: 1fr; }
+  .swarm-role-grid, .swarm-reflection { grid-template-columns: 1fr; }
+  .swarm-role-grid article, .swarm-role-grid article:nth-child(4n), .swarm-role-grid article:nth-child(even), .swarm-role-grid article:nth-child(n + 7) { border-right: 0; border-bottom: 1px solid var(--line); }
+  .swarm-role-grid article:last-child, .swarm-reflection > div:last-child { border-bottom: 0; }
+  .swarm-guide { align-items: flex-start; flex-direction: column; gap: 6px; }
+  .swarm-reflection > div { border-right: 0; border-bottom: 1px solid var(--line); }
+  .swarm-review summary { grid-template-columns: 1fr auto; }
+  .swarm-review summary > em { grid-column: 1 / -1; }
   .contribution-list { grid-template-columns: 1fr; }
   .report-head { align-items: flex-start; flex-direction: column; }
   .reflection-grid, .context-review { grid-template-columns: 1fr; }

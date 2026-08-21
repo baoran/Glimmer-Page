@@ -171,6 +171,23 @@ function shiftForecastMonth(offset) {
   renderForecasts();
 }
 
+const swarmVerdict = {
+  support: { label: "支持", className: "support" },
+  neutral: { label: "中性", className: "neutral" },
+  challenge: { label: "质疑", className: "challenge" },
+};
+
+function renderSwarmReview(review) {
+  if (!review) return `<div class="swarm-unavailable">该研究日早于 Swarm 启用日期，遵循不可变日志原则，不补写事后监督结论。</div>`;
+  const agents = [...Object.values(review.agents ?? {}), review.arbitration].filter(Boolean);
+  const arbitration = review.arbitration;
+  const verdict = swarmVerdict[arbitration.verdict] ?? swarmVerdict.neutral;
+  return `<details class="swarm-review"><summary><span>AGENT SWARM</span><b class="${verdict.className}">${verdict.label} · ${arbitration.score} 分</b><em>分歧 ${arbitration.disagreement?.level ?? "—"}</em></summary><div class="swarm-agent-grid">${agents.map((agent) => {
+    const agentVerdict = swarmVerdict[agent.verdict] ?? swarmVerdict.neutral;
+    return `<article class="swarm-agent ${agentVerdict.className}"><div><b>${esc(agent.label)}</b><span>${agentVerdict.label} ${agent.score}</span></div><small>置信度 ${(Number(agent.confidence ?? 0) * 100).toFixed(0)}%</small><p>${esc(agent.signals?.[0] ?? "等待信号")}</p>${agent.warnings?.[0] ? `<em>${esc(agent.warnings[0])}</em>` : ""}</article>`;
+  }).join("")}</div><div class="swarm-audit"><span>动作标签 <b>${esc(arbitration.actionTag)}</b></span><span>输入哈希 <b>${esc(review.auditTrail?.inputHash?.slice(0, 12) ?? "—")}</b></span><span>截止日 <b>${esc(review.dataCutoffTradeDate)}</b></span><p>${esc(review.policy)}</p></div></details>`;
+}
+
 function renderForecasts() {
   const data = state.forecasts;
   if (!data?.runs?.length) {
@@ -180,6 +197,7 @@ function renderForecasts() {
     $("#forecast-calendar").innerHTML = "";
     $("#journal-day").innerHTML = "";
     $("#vector-method").innerHTML = "";
+    $("#swarm-system").innerHTML = "";
     $("#forecast-report").innerHTML = "";
     return;
   }
@@ -211,14 +229,19 @@ function renderForecasts() {
       <div class="forecast-rank"><b>${String(item.rank).padStart(2, "0")}</b><span>${esc(statusText)}</span></div>
       <div class="forecast-stock"><h3>${esc(item.name)}</h3><small>${esc(item.code)} · 综合分 ${item.score}</small><div class="forecast-prices"><span>观察价<b>${item.entryPrice.toFixed(2)}</b></span><span>最新价<b>${Number(mark.lastPrice ?? item.entryPrice).toFixed(2)}</b></span><span>浮动收益<b class="${tone(mark.returnPct)}">${signed(mark.returnPct)}%</b></span></div><div class="forecast-progress"><i style="width:${progress.toFixed(1)}%"></i></div></div>
       <div class="vector-bars">${data.model.dimensions.map((dimension) => `<span title="${esc(dimension.description)}"><small>${esc(dimension.label)}</small><i><b style="width:${item.vector[dimension.id]}%"></b></i><em>${item.vector[dimension.id]}</em></span>`).join("")}</div>
-      <div class="forecast-logic"><h4>为什么选择它</h4><p class="selection-thesis">${esc(item.analysis?.thesis ?? "依据当前周期权重与综合向量排名入选。")}</p><div class="contribution-list">${(item.analysis?.contributions ?? []).slice(0, 3).map((factor) => `<span><b>${esc(factor.label)}</b><em>${factor.contribution.toFixed(1)} 分贡献</em></span>`).join("")}</div><ul>${item.reasons.map((reason) => `<li>${esc(reason)}</li>`).join("")}</ul><div class="news-proof"><b>资讯核验</b><span>${esc(item.analysis?.news?.summary ?? "暂无资讯证据")}</span>${(item.analysis?.news?.direct?.length ? item.analysis.news.direct : item.analysis?.news?.market?.slice(0, 1) ?? []).map((news) => `<small>${esc(news.source)} · ${esc(news.title)}</small>`).join("")}</div><p class="risk-line"><b>风险</b>${esc(item.risks.join("；"))}</p></div>
+      <div class="forecast-logic"><h4>为什么选择它</h4><p class="selection-thesis">${esc(item.analysis?.thesis ?? "依据当前周期权重与综合向量排名入选。")}</p><div class="contribution-list">${(item.analysis?.contributions ?? []).slice(0, 3).map((factor) => `<span><b>${esc(factor.label)}</b><em>${factor.contribution.toFixed(1)} 分贡献</em></span>`).join("")}</div><ul>${item.reasons.map((reason) => `<li>${esc(reason)}</li>`).join("")}</ul><div class="news-proof"><b>资讯核验</b><span>${esc(item.analysis?.news?.summary ?? "暂无资讯证据")}</span>${(item.analysis?.news?.direct?.length ? item.analysis.news.direct : item.analysis?.news?.market?.slice(0, 1) ?? []).map((news) => `<small>${esc(news.source)} · ${esc(news.title)}</small>`).join("")}</div><p class="risk-line"><b>风险</b>${esc(item.risks.join("；"))}</p>${renderSwarmReview(item.swarmReview)}</div>
     </article>`;
   }).join("");
   $("#vector-method").innerHTML = `<div><p>MODEL VECTOR</p><h2>评分向量如何推理</h2><small>${esc(data.model.principle)}</small></div><div class="vector-legend">${data.model.dimensions.map((item) => `<span><b>${esc(item.label)}</b>${esc(item.description)}</span>`).join("")}</div><p class="method-limit"><b>边界：</b>${esc(data.model.limitation)} 各周期改变向量权重，短周期更重动能与参与度，长周期更重估值、流动性与稳定性。</p>`;
+  const swarm = data.model.swarm;
+  const swarmSummary = run.swarmSummary;
+  const swarmCounts = swarmSummary?.verdictCount ?? { support: 0, neutral: 0, challenge: 0 };
+  $("#swarm-system").innerHTML = `<div class="swarm-head"><div><p>READ-ONLY SUPERVISION SWARM</p><h2>七角色 Agent Swarm</h2><small>${esc(swarm?.policy ?? "监督层尚未启用")}</small></div><div class="swarm-day-summary"><span>覆盖率<b>${swarmSummary ? `${(swarmSummary.coverageRate * 100).toFixed(0)}%` : "未运行"}</b></span><span>支持 / 中性 / 质疑<b>${swarmCounts.support} / ${swarmCounts.neutral} / ${swarmCounts.challenge}</b></span><span>高分歧<b>${swarmSummary?.highDisagreementCases?.length ?? 0} 个</b></span></div></div><div class="swarm-role-grid">${(swarm?.agents ?? []).map((agent, index) => `<article><span>${String(index + 1).padStart(2, "0")}</span><div><b>${esc(agent.label)}</b><p>${esc(agent.responsibility)}</p></div></article>`).join("")}</div><div class="swarm-guide"><b>如何使用</b><p>先看正式 Vector 分数与周期排名，再展开候选卡片中的 Swarm：<strong>支持</strong>表示监督证据较一致，<strong>中性</strong>表示信息有限，<strong>质疑</strong>表示数据或风险 Agent 触发反证。Swarm 只用于复核和人工研究，不会自动换股或改变正式分数。</p></div>`;
   const horizonName = new Map(data.horizons.map((item) => [item.id, item.label]));
   const reflectionLabels = { market: "一省 · 市场", news: "二省 · 资讯", model: "三省 · 模型", next: "明日经验" };
   $("#forecast-report").innerHTML = `<div class="report-head"><div><p>DAILY FORWARD REVIEW</p><h2>${dateText(report.tradeDate)} · 每日三省</h2></div><span>行情 + 资讯 + 模型经验，只使用当时可见数据</span></div>
     <div class="reflection-grid">${Object.entries(reflectionLabels).map(([key, label]) => `<article><span>${label}</span><p>${esc(report.reflection?.[key] ?? "等待报告生成")}</p></article>`).join("")}</div>
+    <div class="swarm-reflection"><div><b>Swarm 监督日报</b><p>${esc(report.swarmReflection?.overview ?? "该研究日尚未启用 Swarm 监督层。")}</p></div><div><b>分歧检查</b><p>${esc(report.swarmReflection?.conflicts ?? "无监督记录。")}</p></div></div>
     <div class="context-review"><div><h3>市场切片</h3><p>领涨指数 <b>${esc(report.contextReview?.market?.leadingIndex?.name ?? "—")}</b> <span class="${tone(report.contextReview?.market?.leadingIndex?.change)}">${signed(report.contextReview?.market?.leadingIndex?.change)}%</span></p><p>强势板块 ${(report.contextReview?.market?.leadingSectors ?? []).map((item) => `<b>${esc(item.name)} ${signed(item.change)}%</b>`).join(" · ")}</p></div><div><h3>今日资讯证据</h3>${(report.contextReview?.news?.headlines ?? []).slice(0, 3).map((item) => `<p><span>${esc(item.source)}</span>${esc(item.title)}</p>`).join("")}</div></div>
     <div class="report-narrative">${report.narrative.map((item, index) => `<p><b>${String(index + 1).padStart(2, "0")}</b>${esc(item)}</p>`).join("")}</div>
     <div class="report-table-wrap"><table class="report-table"><thead><tr><th>周期</th><th>观察中</th><th>浮动为正</th><th>平均浮动</th><th>累计到期</th><th>到期胜率</th><th>到期均值</th></tr></thead><tbody>${report.byHorizon.map((item) => `<tr class="${item.horizonId === horizon.id ? "selected" : ""}"><td>${esc(horizonName.get(item.horizonId))}</td><td>${item.active}</td><td>${item.positiveActive}</td><td class="${tone(item.averageFloatingReturnPct)}">${signed(item.averageFloatingReturnPct)}%</td><td>${item.matured}</td><td>${item.matured ? `${(item.winRate * 100).toFixed(1)}%` : "—"}</td><td class="${tone(item.averageRealizedReturnPct)}">${item.matured ? `${signed(item.averageRealizedReturnPct)}%` : "—"}</td></tr>`).join("")}</tbody></table></div>

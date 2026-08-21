@@ -24,6 +24,8 @@ Maintain the repository's auditable multi-horizon forward-observation pipeline.
 12. Require at least 20 matured samples per horizon before calibration and cap each dimension adjustment at 3% to limit small-sample overfitting.
 13. Preserve each run's effective weights, experience sample count, selection analysis, and news evidence snapshot so calendar views remain historically reproducible.
 14. Historical replay runs must use a distinct model version, declare point-in-time universe and factor limitations, set `trainingEligible: false`, and remain excluded from production win rates and experience calibration.
+15. Treat Agent Swarm output as an immutable, deterministic supervision sidecar. It may explain, challenge, or flag a formal candidate, but must never alter the formal Vector score, rank, selected stocks, effective weights, or tracking outcome.
+16. Persist the Swarm input cutoff date and hash. Never backfill a past run with evidence that was not available on that run's trade date; pre-Swarm logs must remain visibly unreviewed.
 
 ## Workflow
 
@@ -37,6 +39,7 @@ Maintain the repository's auditable multi-horizon forward-observation pipeline.
 8. Record methodology and data limitations in the UI or README whenever the model changes.
 9. Verify calendar navigation selects the matching immutable run and same-day report rather than recomputing history from current data.
 10. When a format preview is needed, run `scripts/backfill-forecast-preview.mjs`, validate the output, and visibly distinguish replay dates from formal forward dates.
+11. For Swarm changes, verify all seven roles have structured scores, confidence, signals, warnings, and evidence, and assert `formalScoreRef === prediction.score` with `nonInterference: true`.
 
 ## Performance Reporting
 
