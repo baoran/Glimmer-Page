@@ -26,6 +26,7 @@ Maintain the repository's auditable multi-horizon forward-observation pipeline.
 14. Historical replay runs must use a distinct model version, declare point-in-time universe and factor limitations, set `trainingEligible: false`, and remain excluded from production win rates and experience calibration.
 15. Treat Agent Swarm output as an immutable, deterministic supervision sidecar. It may explain, challenge, or flag a formal candidate, but must never alter the formal Vector score, rank, selected stocks, effective weights, or tracking outcome.
 16. Persist the Swarm input cutoff date and hash. Never backfill a past run with evidence that was not available on that run's trade date; pre-Swarm logs must remain visibly unreviewed.
+17. Research-grounded parameter changes must launch as a versioned shadow model with citations, `shadowOnly: true`, and `trainingEligible: false`. Do not infer exact optimal weights from literature or promote a shadow without point-in-time out-of-sample evidence.
 
 ## Workflow
 

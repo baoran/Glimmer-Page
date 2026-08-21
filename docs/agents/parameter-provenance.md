@@ -26,6 +26,8 @@
 
 当前 Swarm 总体为 **E1**。页面展示的 `confidence` 也是规则设定的“证据充分度提示”，不是经过校准的概率。
 
+在此基线上，项目新增了 [Research-grounded Shadow Swarm v2](research-grounded-v2.md)，证据标记为 **E1-R**：参数方向有论文和 A 股研究支撑，但精确权重与阈值仍未经 Glimmer 的 point-in-time 样本外验证。它只对未来新交易日并行记录，不覆盖 v1。
+
 ## 各 Agent 参数来源
 
 ### 数据 Agent

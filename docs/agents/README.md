@@ -18,6 +18,8 @@
 
 参数治理文档：[参数来源与证据等级](parameter-provenance.md)。
 
+研究优化版本：[Research-grounded Shadow Swarm v2](research-grounded-v2.md)。该版本参考同行评议论文和 A 股研究调整参数，但仍为未经本站样本外验证的 E1-R shadow，不替换 v1。
+
 其他模块：
 
 - `shared.mjs`：版本、角色定义、权重、统一输出构造和评分工具。

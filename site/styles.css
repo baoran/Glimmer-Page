@@ -571,6 +571,11 @@ tbody tr:hover { background: var(--red-wash); }
 .swarm-role-grid > article > span { color: var(--red); font: 700 9px Geist, sans-serif; }
 .swarm-role-grid b { display: block; color: var(--ink); font-size: 10px; }
 .swarm-role-grid p { margin: 6px 0 0; color: var(--muted); font-size: 9px; line-height: 1.55; }
+.swarm-shadow-note { min-height: 78px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 19px; background: color-mix(in srgb, #4b70c8 8%, transparent); border-bottom: 1px solid var(--line); }
+.swarm-shadow-note span { display: block; margin-bottom: 5px; color: #5474bd; font: 700 8px Geist, sans-serif; letter-spacing: .14em; }
+.swarm-shadow-note b { color: var(--ink); font-size: 11px; }
+.swarm-shadow-note p { margin: 5px 0 0; color: var(--muted); font-size: 8px; line-height: 1.5; }
+.swarm-shadow-note > strong { flex: 0 0 auto; color: #5474bd; font-size: 9px; }
 .swarm-guide { display: flex; gap: 18px; padding: 14px 19px; color: var(--muted); background: color-mix(in srgb, var(--red-soft) 32%, transparent); font-size: 9px; line-height: 1.65; }
 .swarm-guide > b { flex: 0 0 auto; color: var(--red); }
 .swarm-guide p { margin: 0; }
@@ -1117,6 +1122,7 @@ footer { margin-top: 66px; }
   .swarm-role-grid article, .swarm-role-grid article:nth-child(4n), .swarm-role-grid article:nth-child(even), .swarm-role-grid article:nth-child(n + 7) { border-right: 0; border-bottom: 1px solid var(--line); }
   .swarm-role-grid article:last-child, .swarm-reflection > div:last-child { border-bottom: 0; }
   .swarm-guide { align-items: flex-start; flex-direction: column; gap: 6px; }
+  .swarm-shadow-note { align-items: flex-start; flex-direction: column; }
   .swarm-reflection > div { border-right: 0; border-bottom: 1px solid var(--line); }
   .swarm-review summary { grid-template-columns: 1fr auto; }
   .swarm-review summary > em { grid-column: 1 / -1; }

@@ -17,8 +17,10 @@ const horizonIds = new Set(data.horizons.map((item) => item.id));
 const dimensionIds = data.model.dimensions.map((item) => item.id);
 const specialistIds = ["data", "technical", "fundamental", "market", "news", "risk"];
 const verdicts = ["support", "neutral", "challenge"];
+const shadowDefinitions = data.model.swarmShadows ?? {};
 const predictionIds = new Set();
 let swarmReviewedPredictionCount = 0;
+let shadowSwarmReviewedPredictionCount = 0;
 for (const run of data.runs) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(run.asOfTradeDate)) fail(`运行日期无效：${run.asOfTradeDate}`);
   for (const horizon of data.horizons) {
@@ -51,12 +53,31 @@ for (const run of data.runs) {
       if (!['low', 'medium', 'high'].includes(arbitration.disagreement?.level)) fail(`Swarm 分歧等级无效：${prediction.id}`);
       swarmReviewedPredictionCount += 1;
     } else if (prediction.swarmReview) fail(`未声明 Swarm 的运行包含监督结果：${prediction.id}`);
+    for (const [version, review] of Object.entries(prediction.shadowSwarmReviews ?? {})) {
+      const definition = shadowDefinitions[version];
+      if (!definition || review.swarmVersion !== version || definition.shadowOnly !== true || definition.trainingEligible !== false) fail(`Shadow Swarm 版本未声明：${prediction.id}`);
+      if (review.formalScoreRef !== prediction.score || review.formalModelVersion !== prediction.modelVersion || review.dataCutoffTradeDate !== prediction.entryCloseDate) fail(`Shadow Swarm 正式模型引用错误：${prediction.id}`);
+      if (review.shadowOnly !== true || review.trainingEligible !== false || review.auditTrail?.nonInterference !== true || review.arbitration?.nonInterference !== true) fail(`Shadow Swarm 隔离约束无效：${prediction.id}`);
+      if (!/^[a-f0-9]{64}$/.test(review.auditTrail?.inputHash ?? "")) fail(`Shadow Swarm 输入哈希无效：${prediction.id}`);
+      for (const id of specialistIds) {
+        const agent = review.agents?.[id];
+        if (agent?.agentId !== id || !verdicts.includes(agent.verdict) || !(agent.score >= 0 && agent.score <= 100) || !(agent.confidence >= 0 && agent.confidence <= 1)) fail(`Shadow Swarm ${id} Agent 输出无效：${prediction.id}`);
+        if (!Array.isArray(agent.signals) || !Array.isArray(agent.warnings) || !Array.isArray(agent.evidence) || !Array.isArray(agent.referenceIds)) fail(`Shadow Swarm ${id} Agent 证据结构无效：${prediction.id}`);
+      }
+      if (review.arbitration?.agentId !== "arbitration" || !verdicts.includes(review.arbitration.verdict) || review.arbitration.shadowOnly !== true) fail(`Shadow Swarm 仲裁输出无效：${prediction.id}`);
+      shadowSwarmReviewedPredictionCount += 1;
+    }
   }
   if (run.swarmVersion) {
     if (run.swarmVersion !== data.model.swarm.version) fail(`运行 Swarm 版本不一致：${run.runId}`);
     if (run.swarmSummary?.reviewedCount !== run.predictions.length || run.swarmSummary.coverageRate !== 1 || run.swarmSummary.nonInterference !== true) fail(`运行 Swarm 汇总不完整：${run.runId}`);
     const verdictTotal = Object.values(run.swarmSummary.verdictCount ?? {}).reduce((sum, value) => sum + value, 0);
     if (verdictTotal !== run.predictions.length) fail(`运行 Swarm 仲裁计数错误：${run.runId}`);
+  }
+  for (const [version, summary] of Object.entries(run.shadowSwarmSummaries ?? {})) {
+    if (!shadowDefinitions[version] || summary.swarmVersion !== version || summary.shadowOnly !== true || summary.trainingEligible !== false) fail(`运行 Shadow Swarm 汇总版本无效：${run.runId}`);
+    const reviewed = run.predictions.filter((item) => item.shadowSwarmReviews?.[version]).length;
+    if (summary.reviewedCount !== reviewed || summary.coverageRate !== reviewed / run.predictions.length || summary.nonInterference !== true) fail(`运行 Shadow Swarm 汇总不完整：${run.runId}`);
   }
 }
 
@@ -68,6 +89,7 @@ for (const item of data.tracking) {
 }
 if (data.audit?.predictionCount !== predictionIds.size) fail("审计计数与实际预测数不一致");
 if (data.audit?.swarmSchemaVersion !== data.model.swarm.schemaVersion || data.audit?.swarmReviewedPredictionCount !== swarmReviewedPredictionCount) fail("Swarm 审计计数与实际监督记录不一致");
+if (data.audit?.shadowSwarmReviewedPredictionCount !== shadowSwarmReviewedPredictionCount) fail("Shadow Swarm 审计计数与实际监督记录不一致");
 for (const report of data.reports) {
   if (!report.contextReview?.market || !report.contextReview?.news) fail(`市场资讯复盘缺失：${report.tradeDate}`);
   if (!["market", "news", "model", "next"].every((key) => report.reflection?.[key])) fail(`每日三省不完整：${report.tradeDate}`);
@@ -75,4 +97,4 @@ for (const report of data.reports) {
   if (swarmRun && (!report.swarmReflection?.overview || !report.swarmReflection?.policy)) fail(`Swarm 日报缺失：${report.tradeDate}`);
 }
 
-console.log(`预测数据校验通过：${data.runs.length} 个交易日，${predictionIds.size} 个预测，${data.tracking.filter((item) => item.status === "matured").length} 个已到期，${swarmReviewedPredictionCount} 个已通过 Swarm 监督。`);
+console.log(`预测数据校验通过：${data.runs.length} 个交易日，${predictionIds.size} 个预测，${data.tracking.filter((item) => item.status === "matured").length} 个已到期，${swarmReviewedPredictionCount} 个 v1 监督，${shadowSwarmReviewedPredictionCount} 个 shadow 监督。`);

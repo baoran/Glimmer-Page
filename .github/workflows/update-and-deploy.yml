@@ -38,6 +38,7 @@ jobs:
         continue-on-error: true
         run: |
           node scripts/update-pages-data.mjs
+          node scripts/test-forecast-swarm.mjs
           node scripts/validate-forecast-data.mjs
 
       - name: Commit the daily snapshot

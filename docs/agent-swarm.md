@@ -24,6 +24,8 @@ Agent Swarm 是 `horizon-vector-v2` 外围的**只读研究与监督层**。正�
 
 **重要：当前所有 Swarm 公式和参数都是 E1 人工工程先验，未经过历史拟合或充分样本外验证。** 参数逐项来源、证据等级、当前校准问题和升级流程见 [参数来源与证据等级](agents/parameter-provenance.md)。
 
+项目另有一套 [Research-grounded Shadow Swarm v2](agents/research-grounded-v2.md)：依据动量、中国价值与规模、流动性、波动和金融文本论文调整参数，并通过置信度向中性收缩。它仍未达到 E2，只从下一新交易日并行记录，不回填旧日志、不进入训练、不改变正式结果。
+
 ## 架构
 
 每个新正式预测会同时运行七个角色：

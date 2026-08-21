@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { buildSwarmReflection, buildSwarmReview, buildSwarmSummary, PARAMETER_EVIDENCE, SWARM_AGENT_DEFINITIONS, SWARM_POLICY, SWARM_SCHEMA_VERSION, SWARM_VERSION } from "./lib/forecast-swarm.mjs";
+import { buildResearchSwarmReview, buildResearchSwarmSummary, RESEARCH_SWARM_DEFINITION, RESEARCH_SWARM_VERSION } from "./lib/forecast-swarm-research-v2.mjs";
 
 const ROOT = resolve(process.cwd(), "site", "data");
 const EAST_LIST = "https://82.push2.eastmoney.com/api/qt/clist/get";
@@ -431,6 +432,12 @@ function chooseHorizonStocks(stocks, market, horizon, news, experience, dataStat
       stock, vector, amplitude, market, news, sourceStatus: dataStatus.status,
       formalScore, horizon, generatedAt, trainingEligible: true,
     });
+    prediction.shadowSwarmReviews = {
+      [RESEARCH_SWARM_VERSION]: buildResearchSwarmReview({
+        stock, vector, amplitude, market, news, sourceStatus: dataStatus.status,
+        formalScore, horizon, generatedAt,
+      }),
+    };
     return prediction;
   });
 }
@@ -475,6 +482,7 @@ function buildForecastData(previous, stocks, market, sectors, news, generatedAt,
       runId: `${market.tradeDate}:${FORECAST_MODEL_VERSION}`, asOfTradeDate: market.tradeDate, generatedAt,
       modelVersion: FORECAST_MODEL_VERSION, sourceStatus: dataStatus.status, experienceProfiles,
       swarmVersion: SWARM_VERSION, swarmSummary: buildSwarmSummary(predictions), predictions,
+      shadowSwarmSummaries: { [RESEARCH_SWARM_VERSION]: buildResearchSwarmSummary(predictions) },
     }, ...runs];
   }
   runs = runs.slice(0, 420);
@@ -563,12 +571,14 @@ function buildForecastData(previous, stocks, market, sectors, news, generatedAt,
         version: SWARM_VERSION, schemaVersion: SWARM_SCHEMA_VERSION, policy: SWARM_POLICY,
         nonInterference: true, parameterEvidence: PARAMETER_EVIDENCE, agents: SWARM_AGENT_DEFINITIONS,
       },
+      swarmShadows: { [RESEARCH_SWARM_VERSION]: RESEARCH_SWARM_DEFINITION },
     },
     horizons: FORECAST_HORIZONS.map(({ weights, ...item }) => ({ ...item, weights })), tradingDates, runs, tracking, reports,
     audit: {
       predictionCount: [...predictionById].length, retentionTradingDays: 420, entryBasis: "预测日收盘观察价",
       outcomeRule: "第 N 个后续有效收盘价相对观察价大于 0", swarmSchemaVersion: SWARM_SCHEMA_VERSION,
       swarmReviewedPredictionCount: [...predictionById.values()].filter((item) => item.swarmReview).length,
+      shadowSwarmReviewedPredictionCount: [...predictionById.values()].filter((item) => item.shadowSwarmReviews?.[RESEARCH_SWARM_VERSION]).length,
     },
   };
 }
