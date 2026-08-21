@@ -6,6 +6,22 @@ Agent Swarm 是 `horizon-vector-v2` 外围的**只读研究与监督层**。正�
 
 当前实现是可在 GitHub Actions 中稳定复现的确定性专业 Agent，而不是每天调用外部大模型。这样可以保证同一输入得到同一结论、无需 API 密钥，并保留完整审计证据。未来可把大模型研究结果作为新的独立 Agent 接入，但不能绕过数据截止日和不可变日志约束。
 
+## 实现与详细文档
+
+公共入口是 `scripts/lib/forecast-swarm.mjs`，编排逻辑位于 `scripts/lib/forecast-swarm/orchestrator.mjs`，每个子 Agent 都有独立实现和独立设计文档：
+
+| Agent | 实现模块 | 详细文档 |
+|---|---|---|
+| 数据 Agent | `agents/data-agent.mjs` | [数据 Agent](agents/data-agent.md) |
+| 技术 Agent | `agents/technical-agent.mjs` | [技术 Agent](agents/technical-agent.md) |
+| 基本面 Agent | `agents/fundamental-agent.mjs` | [基本面 Agent](agents/fundamental-agent.md) |
+| 市场 Agent | `agents/market-agent.mjs` | [市场 Agent](agents/market-agent.md) |
+| 新闻 Agent | `agents/news-agent.mjs` | [新闻 Agent](agents/news-agent.md) |
+| 风险 Agent | `agents/risk-agent.mjs` | [风险 Agent](agents/risk-agent.md) |
+| 仲裁 Agent | `agents/arbitration-agent.mjs` | [仲裁 Agent](agents/arbitration-agent.md) |
+
+统一输入输出契约、版本规则和优化检查清单见 [子系统索引](agents/README.md)。
+
 ## 架构
 
 每个新正式预测会同时运行七个角色：
