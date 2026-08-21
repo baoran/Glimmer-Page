@@ -11,11 +11,12 @@
 - 研究日历可按交易日回看候选、选择依据和当日报告；只有至少 20 个已到期样本才允许从下一交易日起温和校准权重。
 - `forecast-supervision-swarm-v1` 在每个新候选生成后运行数据、技术、基本面、市场、新闻、风险和仲裁七个确定性 Agent，保存证据、置信度、分歧与输入哈希。它是只读监督层，不改变六维 Vector 的候选、分数或排名。
 - `forecast-supervision-swarm-research-v2` 参考同行评议论文和 A 股研究调整风险、新闻、动量与价值的先验，并对低置信度分数向中性收缩。它只作为未来新交易日的 shadow 并行记录，不回填历史、不进入经验池。
+- `python scripts/calibrate-swarm-v3.py` 使用历史日期股票池、严格时间切分和冻结测试生成 v3 参数候选报告。当前 3,192 条历史观测的冻结测试未证明候选优于 v2 研究先验，因此结果标记为 `E2-rejected`，没有接入页面或前向 shadow。
 - 页面可展开每只候选的 Swarm 明细，并在日级面板查看覆盖率、支持/中性/质疑分布和高分歧案例。启用日前的日志不会被事后补写。
 - `node scripts/backfill-forecast-preview.mjs` 可生成前 10 个交易日的历史回放体验。回放使用真实未复权日线，但股票池取自当前高流动股票且历史估值缺失，因此与正式前向日志、胜率及经验池严格隔离。
 - 运行 `node scripts/validate-forecast-data.mjs` 可检查六周期、每期五只、向量完整性、追踪引用以及 Swarm 非干预和审计一致性。
 - 运行 `node scripts/test-forecast-swarm.mjs` 可验证 v1 非干预、v2 shadow 隔离、低证据收缩、长周期降置信度以及数据/风险硬质疑。
 
-完整架构、仲裁口径、daily run 行为和页面使用方法见 [Agent Swarm 系统介绍与使用说明](docs/agent-swarm.md)。每个子 Agent 的定位、输入输出、实现公式、风险和优化方向见 [子 Agent 文档索引](docs/agents/README.md)；当前人工公式的来源、证据等级和科学升级流程见 [参数来源与证据等级](docs/agents/parameter-provenance.md)；论文依据和研究参数见 [Research-grounded Shadow Swarm v2](docs/agents/research-grounded-v2.md)。
+完整架构、仲裁口径、daily run 行为和页面使用方法见 [Agent Swarm 系统介绍与使用说明](docs/agent-swarm.md)。每个子 Agent 的定位、输入输出、实现公式、风险和优化方向见 [子 Agent 文档索引](docs/agents/README.md)；当前人工公式的来源、证据等级和科学升级流程见 [参数来源与证据等级](docs/agents/parameter-provenance.md)；论文依据和研究参数见 [Research-grounded Shadow Swarm v2](docs/agents/research-grounded-v2.md)；首轮时点化历史校准及其未通过原因见 [Historical Calibration v3 Candidate](docs/agents/historical-calibration-v3.md)。
 
 该模块是规则排序与前向观察实验，不构成收益承诺或投资建议。当前观察价使用预测日收盘价，并不代表次日真实可成交价格。

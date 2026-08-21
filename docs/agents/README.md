@@ -20,6 +20,8 @@
 
 研究优化版本：[Research-grounded Shadow Swarm v2](research-grounded-v2.md)。该版本参考同行评议论文和 A 股研究调整参数，但仍为未经本站样本外验证的 E1-R shadow，不替换 v1。
 
+历史校准实验：[Historical Calibration v3 Candidate](historical-calibration-v3.md)。该实验使用时点化股票池以及训练、验证、冻结测试三段数据；当前结果未通过接入门槛，因此没有覆盖或替换 v2。
+
 其他模块：
 
 - `shared.mjs`：版本、角色定义、权重、统一输出构造和评分工具。

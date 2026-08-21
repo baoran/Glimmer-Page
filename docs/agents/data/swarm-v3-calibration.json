@@ -1,0 +1,154 @@
+{
+  "version": "forecast-supervision-swarm-historical-v3-candidate",
+  "generatedAt": "2026-08-21T13:47:27.819401+00:00",
+  "status": "historical-candidate",
+  "evidenceLevel": "E1-R",
+  "calibrationStage": "E2-rejected",
+  "validated": false,
+  "shadowOnly": true,
+  "trainingEligible": false,
+  "recommendedForForwardShadow": false,
+  "data": {
+    "source": "BaoStock 0.9.3",
+    "priceAdjustment": "raw; outcomes compounded from daily pctChg",
+    "start": "2018-01-01",
+    "lastAnchor": "2024-07-01",
+    "outcomeDataEnd": "2025-12-31",
+    "universe": "每个季度首个交易日的实际上市交易股票；按代码稳定哈希抽取 320 只",
+    "candidateSelection": "按 horizon-vector-v2 历史可见代理排序后每周期取前 20 只",
+    "news": "历史新闻覆盖不足；固定中性，权重仅保留 3% 文献先验",
+    "splits": {
+      "train": "2018-01-01..2021-12-31",
+      "validation": "2022-01-01..2022-12-31",
+      "test": "2023-01-01..2024-07-01"
+    },
+    "sampleCount": 3192,
+    "anchorCount": 27,
+    "uniqueStockCount": 458,
+    "observationInputHash": "efca719b9fae999f7e7c0fc35fa76225be852c01176021579135012cb3fc9201"
+  },
+  "parameters": {
+    "agentWeights": {
+      "technical": 0.2553,
+      "fundamental": 0.2553,
+      "market": 0.153,
+      "risk": 0.3064,
+      "news": 0.03
+    },
+    "priorWeights": {
+      "technical": 0.2553,
+      "fundamental": 0.2553,
+      "market": 0.1532,
+      "risk": 0.3063,
+      "news": 0.03
+    },
+    "probabilityCalibration": {
+      "center": 63.1057,
+      "temperature": 20.0
+    },
+    "regularization": 80,
+    "bounds": "各可训练 Agent 相对研究先验最多移动 10 个百分点；权重非负且总和为 1"
+  },
+  "evaluation": {
+    "train": {
+      "samples": 1872,
+      "positiveRate": 0.4909,
+      "auc": 0.4494,
+      "brier": 0.2567,
+      "logLoss": 0.7067,
+      "constantBrier": 0.2499
+    },
+    "validation": {
+      "samples": 480,
+      "positiveRate": 0.3896,
+      "auc": 0.3945,
+      "brier": 0.2531,
+      "logLoss": 0.6996,
+      "constantBrier": 0.2378
+    },
+    "testCandidate": {
+      "samples": 840,
+      "positiveRate": 0.4452,
+      "auc": 0.5117,
+      "brier": 0.2508,
+      "logLoss": 0.6947,
+      "constantBrier": 0.247
+    },
+    "testResearchPrior": {
+      "samples": 840,
+      "positiveRate": 0.4452,
+      "auc": 0.5117,
+      "brier": 0.2508,
+      "logLoss": 0.6947,
+      "constantBrier": 0.247
+    },
+    "testBrierImprovement": 0.0,
+    "clusterBootstrap": {
+      "auc95": [
+        0.4532,
+        0.5708
+      ],
+      "brier95": [
+        0.2466,
+        0.2544
+      ]
+    },
+    "testByHorizon": {
+      "week": {
+        "samples": 140,
+        "positiveRate": 0.4214,
+        "auc": 0.5269,
+        "brier": 0.2509,
+        "logLoss": 0.695,
+        "constantBrier": 0.2438
+      },
+      "two-weeks": {
+        "samples": 140,
+        "positiveRate": 0.45,
+        "auc": 0.5937,
+        "brier": 0.2465,
+        "logLoss": 0.6861,
+        "constantBrier": 0.2475
+      },
+      "month": {
+        "samples": 140,
+        "positiveRate": 0.4714,
+        "auc": 0.6357,
+        "brier": 0.2435,
+        "logLoss": 0.6801,
+        "constantBrier": 0.2492
+      },
+      "quarter": {
+        "samples": 140,
+        "positiveRate": 0.4,
+        "auc": 0.5094,
+        "brier": 0.2525,
+        "logLoss": 0.6981,
+        "constantBrier": 0.24
+      },
+      "half-year": {
+        "samples": 140,
+        "positiveRate": 0.4286,
+        "auc": 0.3921,
+        "brier": 0.2567,
+        "logLoss": 0.7066,
+        "constantBrier": 0.2449
+      },
+      "year": {
+        "samples": 140,
+        "positiveRate": 0.5,
+        "auc": 0.4169,
+        "brier": 0.2546,
+        "logLoss": 0.7023,
+        "constantBrier": 0.25
+      }
+    }
+  },
+  "limitations": [
+    "BaoStock 不是交易所官方 point-in-time 数据库，字段修订历史和退市覆盖仍需二次核验。",
+    "股票样本为确定性随机子样本，不是完整 A 股横截面；总市值由成交量和换手率推导为流通市值代理。",
+    "历史新闻不足，因此新闻参数没有被训练；财报公告时点、行业中性和交易成本尚未进入模型。",
+    "候选与周期共享股票和日期；测试置信区间采用日期簇 bootstrap，但不能完全消除相关性。",
+    "E2-rejected 表示本次历史校准尝试未通过冻结测试；不得接入前向运行、覆盖 v2 或改写历史日志。"
+  ]
+}
